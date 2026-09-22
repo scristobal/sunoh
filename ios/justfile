@@ -1,0 +1,56 @@
+set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
+set positional-arguments
+# Just 1.47+ keeps help and credential setup independent of simulator discovery.
+set lazy
+
+PROJECT := "Sunoh.xcodeproj"
+SCHEME := "Sunoh"
+BUNDLE_ID := "com.samuel.sunoh"
+DERIVED := justfile_directory() / ".build"
+APP := DERIVED / "Build/Products/Debug-iphonesimulator/Sunoh.app"
+SEED := env("SEED", justfile_directory() / ".local/seed.jsonl")
+PHONE_UDID := `printenv PHONE_UDID || xcrun simctl list devices available -j | python3 scripts/simulator.py`
+
+# List development commands without starting an operation.
+[default]
+[private]
+default:
+    @just --list
+
+[private]
+phone:
+    @test -n {{ quote(PHONE_UDID) }} || (echo "Boot an iPhone simulator first."; exit 1)
+
+# Build for the booted iPhone simulator, or the selected PHONE_UDID.
+build: phone
+    xcodebuild -project {{ quote(PROJECT) }} -scheme {{ quote(SCHEME) }} -destination {{ quote("id=" + PHONE_UDID) }} -derivedDataPath {{ quote(DERIVED) }} build
+
+# Build, install and launch the app, then open the simulator viewer.
+run: build
+    xcrun simctl terminate {{ quote(PHONE_UDID) }} {{ quote(BUNDLE_ID) }} 2>/dev/null || true
+    xcrun simctl install {{ quote(PHONE_UDID) }} {{ quote(APP) }}
+    xcrun simctl launch {{ quote(PHONE_UDID) }} {{ quote(BUNDLE_ID) }}
+    python3 scripts/simulator.py --open
+
+# Run tests; pass -only-testing:SunohTests to run only unit tests.
+test *args: phone
+    xcodebuild -project {{ quote(PROJECT) }} -scheme {{ quote(SCHEME) }} -destination {{ quote("id=" + PHONE_UDID) }} -derivedDataPath {{ quote(DERIVED) }} -parallel-testing-enabled NO "$@" test
+
+# Replay DebugRoute.gpx on the selected simulator.
+gps: phone
+    python3 scripts/gps.py DebugRoute.gpx | xcrun simctl location {{ quote(PHONE_UDID) }} start --speed=5 -
+
+# Prompt for map service credentials and save the private app build configuration.
+token:
+    @python3 scripts/credentials.py
+
+[private]
+source:
+    @test -f {{ quote(SEED) }} && test -r {{ quote(SEED) }} && test -s {{ quote(SEED) }} || (printf 'Seed file is missing, empty or unreadable: %s\nUse just SEED=/path/to/seed.jsonl seed\n' {{ quote(SEED) }}; exit 1)
+
+# Import development data with just SEED=/path/to/seed.jsonl seed.
+seed: source build
+    xcrun simctl terminate {{ quote(PHONE_UDID) }} {{ quote(BUNDLE_ID) }} 2>/dev/null || true
+    xcrun simctl install {{ quote(PHONE_UDID) }} {{ quote(APP) }}
+    python3 scripts/seed.py {{ quote(PHONE_UDID) }} {{ quote(BUNDLE_ID) }} {{ quote(SEED) }}
+    python3 scripts/simulator.py --open

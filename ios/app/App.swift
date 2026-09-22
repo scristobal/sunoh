@@ -74,7 +74,7 @@ import SwiftUI
             if ProcessInfo.processInfo.arguments.contains("--seed") {
                 let documents = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
                 try await repository.importSeed(from: documents.appendingPathComponent("seed.jsonl"))
-                // This simulator-only launch acts as a command for `make seed`.
+                // This simulator-only launch acts as a command for `just seed`.
                 // Exit only after the repository has saved and verified the import.
                 exit(EXIT_SUCCESS)
             }
