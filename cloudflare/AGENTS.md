@@ -1,26 +1,12 @@
-# Maintaining this document
+# Map delivery
 
-- Keep this as the only non-code file written for agents. Documentation and READMEs are the only exceptions. Do not create separate files that narrate the code.
-- Record lasting decisions, ownership, tradeoffs and deferred commitments. Each rule must guide a choice or protect a requirement as the code evolves.
-- State durable decisions precisely, including chosen platforms or tools when the choice matters. Keep command examples, source inventories, paths, configuration values and implementation descriptions with the code that defines them.
-- Code and tests establish current behavior, not permanent policy. Ground new rules in explicit user direction or accepted decisions; resolve uncertain intent before turning an observation or proposal into a requirement.
-- Record lasting user conventions in the same change. Preserve their scope and strength, distinguish requirements from preferences, and keep exceptions beside their rules. Do not generalize temporary corrections or silently change policy.
-- Before retiring guidance, preserve still-relevant decisions here and keep operational knowledge discoverable through code and tool help. Keep task updates and incident histories in the conversation.
-- Give each rule one purpose. Revise existing rules instead of appending duplicates. Merge overlaps, remove obsolete guidance and explain reasons where they help future decisions.
-- Read and follow [unslop](https://www.skills.sh/cursor/plugins/unslop) when editing. Use plain words and complete sentences, cut filler and repetition, and reread for clarity. Keep the wording direct without weakening requirements or adding implementation detail. Keep each paragraph and list item on one source line; do not add manual line wraps or unnecessary blank lines.
-- Treat sunoh-docs as a closed, read-only archive. Do not consult or maintain it, restore its contents as active guidance, or make active workflows depend on it.
-- Do not retrieve other tasks or saved memories, generate memories, or save task transcripts. Disable supported task-history persistence, and report any retention that project configuration cannot prevent.
-
-# Project direction
-
-Sunō is a ski and snowboard tracking app that encourages exploration. This repository owns map publication and delivery through Cloudflare Workers and private R2 storage.
+This project owns map publication and delivery through Cloudflare Workers and private R2 storage.
 
 ## Ownership and scope
 
-- Accept completed map packages from the generation project. Keep generation, delivery and app integration independent; do not import companion repositories' code or configuration, or invoke their build tools.
+- Accept completed map packages from the generation project.
 - Keep service access independent of client platforms. Deliver credentials as neutral data; each client owns its local setup and integration.
 - Preserve approved package contents, map appearance, source attribution and the public address contract. Delivery changes must not alter the map project's data or rendering decisions.
-- Make only requested changes. Explain additional concerns and the options, including leaving them unchanged, before implementing a remedy. Honor explicit deferrals and retain the outstanding requirement.
 - Resolve compatibility within the chosen toolchain before introducing alternatives. Consult authoritative platform guidance and identify custom integration work. Add dependencies or automation only for a demonstrated need.
 - Keep related statements together in code and separate distinct operations with deliberate spacing.
 
@@ -70,6 +56,6 @@ Sunō is a ski and snowboard tracking app that encourages exploration. This repo
 
 ## Operations and evidence
 
-- Run imports, publications, benchmarks, provisioning, deployments and version control commits or pushes only when explicitly requested. A tooling change does not authorize an operational run.
+- Run imports, publications, benchmarks, provisioning and deployments only when explicitly requested. A tooling change does not authorize an operational run.
 - Do not add tuning or benchmark machinery without a request. Failed transfers can be retried manually through the established workflow.
 - Distinguish intended behavior, implementation, verification and deployment in reports. Local emulation cannot establish production access enforcement, edge caching or network performance.

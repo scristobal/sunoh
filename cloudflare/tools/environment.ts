@@ -60,7 +60,7 @@ export const environment = {
 
   RUNTIME_PATH: directory({
     desc: "Existing directory containing local Wrangler state under wrangler/",
-    example: "/srv/sunoh-cf/runtime",
+    example: "/srv/sunoh/cloudflare/runtime",
     default: resolve(projectRoot, "runtime"),
   }),
 

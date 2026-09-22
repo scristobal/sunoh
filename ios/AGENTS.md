@@ -1,24 +1,8 @@
-# Maintaining this document
-
-- Keep this as the only non-code file written for agents. Documentation and READMEs are the only exceptions. Do not create separate files that narrate the code.
-- Record lasting decisions, ownership, tradeoffs and deferred commitments. Add a rule only when user direction or an accepted decision establishes its lasting scope, it guides a future choice, and it remains useful across implementations that preserve the same intent.
-- State durable decisions precisely, including chosen platforms or tools when the choice matters. Keep command examples, source inventories, paths, configuration values and implementation descriptions with the code that defines them.
-- Code and tests establish current behavior. A requested behavior change alone does not establish permanent policy. Before finishing an edit, check every changed rule against the inclusion criteria above and remove implementation descriptions or unsupported constraints. Resolve uncertain intent before creating a requirement.
-- Record lasting user conventions in the same change. Preserve their scope and strength, distinguish requirements from preferences, and keep exceptions beside their rules. Do not generalize temporary corrections or silently change policy.
-- Before retiring guidance, preserve still-relevant decisions here and keep operational knowledge discoverable through code and tool help. Keep task updates and incident histories in the conversation.
-- Give each rule one purpose. Revise existing rules instead of appending duplicates. Merge overlaps, remove obsolete guidance and explain reasons where they help future decisions.
-- Read and follow [unslop](https://www.skills.sh/cursor/plugins/unslop) when editing. Use plain words and complete sentences, cut filler and repetition, and reread for clarity. Keep the wording direct without weakening requirements or adding implementation detail. Keep each paragraph and list item on one source line; do not add manual line wraps or unnecessary blank lines.
-- Treat sunoh-docs as a closed, read-only archive. Do not consult or maintain it, restore its contents as active guidance, or make active workflows depend on it.
-- Do not retrieve other conversations or saved memories, or use them as context. Saving and inspecting the current conversation are allowed.
-
-# Project direction
-
-Sunō is a ski and snowboard tracking app that encourages exploration and personal progress. Use Sunō in the interface, documentation and prose. Use Sunoh only when ASCII characters are required.
+# iOS app
 
 ## Ownership and scope
 
 - Keep this a native iPhone app with its Live Activity companion. Write app logic in Swift and use native persistence. Do not add other platforms or foreign language bridges.
-- Let the map generation and delivery projects own their respective work. Consume their published interfaces without depending on their internal code or tooling.
 - Keep recording and personal history useful without an account, backup or social sharing. Private backup and social sharing must remain optional and independently selectable; personal progress must not depend on social competition.
 - Preserve offline use as a product requirement, including first launch. Hosted maps do not replace the deferred requirement for a small bundled fallback that works without online authentication. Its packaging needs an explicit decision.
 
