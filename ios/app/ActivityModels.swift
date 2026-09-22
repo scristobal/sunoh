@@ -1,0 +1,207 @@
+import Foundation
+
+struct ActivityID: RawRepresentable, Codable, Hashable, Sendable, ExpressibleByStringLiteral {
+    let rawValue: String
+    init(rawValue: String) { self.rawValue = rawValue }
+    init() { rawValue = UUID().uuidString }
+    init(stringLiteral value: String) { rawValue = value }
+}
+
+struct SegmentID: RawRepresentable, Codable, Hashable, Sendable, ExpressibleByStringLiteral {
+    let rawValue: String
+    init(rawValue: String) { self.rawValue = rawValue }
+    init() { rawValue = UUID().uuidString }
+    init(stringLiteral value: String) { rawValue = value }
+}
+
+/// Exact source precision. Date conversion belongs at system/UI boundaries.
+struct Timestamp: Codable, Hashable, Comparable, Sendable, ExpressibleByIntegerLiteral {
+    let millisecondsSince1970: Int64
+    init(millisecondsSince1970: Int64) { self.millisecondsSince1970 = millisecondsSince1970 }
+    init(integerLiteral value: Int64) { millisecondsSince1970 = value }
+    var date: Date { Date(timeIntervalSince1970: Double(millisecondsSince1970) / 1_000) }
+    static func < (lhs: Self, rhs: Self) -> Bool { lhs.millisecondsSince1970 < rhs.millisecondsSince1970 }
+}
+
+struct Coordinate: Codable, Hashable, Sendable {
+    let latitude: Double
+    let longitude: Double
+
+    init(latitude: Double, longitude: Double) throws {
+        guard (-90...90).contains(latitude), (-180...180).contains(longitude) else { throw ActivityError.invalidPoint }
+        self.latitude = latitude; self.longitude = longitude
+    }
+
+    init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(latitude: values.decode(Double.self, forKey: .latitude),
+                      longitude: values.decode(Double.self, forKey: .longitude))
+    }
+}
+
+struct TrackPoint: Codable, Hashable, Sendable {
+    let recordedAt: Timestamp
+    let coordinate: Coordinate
+    let elevationMeters: Double?
+
+    init(recordedAt: Timestamp, coordinate: Coordinate, elevationMeters: Double?) throws {
+        guard recordedAt.millisecondsSince1970 >= 0, elevationMeters?.isFinite ?? true else { throw ActivityError.invalidPoint }
+        self.recordedAt = recordedAt; self.coordinate = coordinate; self.elevationMeters = elevationMeters
+    }
+
+    init(timestampMilliseconds: Int64, latitude: Double, longitude: Double, elevationMeters: Double?) throws {
+        try self.init(recordedAt: Timestamp(millisecondsSince1970: timestampMilliseconds),
+                      coordinate: Coordinate(latitude: latitude, longitude: longitude), elevationMeters: elevationMeters)
+    }
+
+    init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(recordedAt: values.decode(Timestamp.self, forKey: .recordedAt),
+                      coordinate: values.decode(Coordinate.self, forKey: .coordinate),
+                      elevationMeters: values.decodeIfPresent(Double.self, forKey: .elevationMeters))
+    }
+
+    var timestampMilliseconds: Int64 { recordedAt.millisecondsSince1970 }
+    var latitude: Double { coordinate.latitude }
+    var longitude: Double { coordinate.longitude }
+}
+
+enum ActivityStatus: String, Codable, Sendable { case recording, paused, completed }
+enum ActivityOrigin: String, Codable, Sendable { case deviceRecording, gpxImport, legacyUnknown }
+enum SegmentBoundary: String, Codable, Sendable { case recordingStarted, recordingResumed, importedSegment, legacyUnknown }
+enum RecordingPhase: String, Codable, Sendable { case recording, paused }
+
+struct ActivitySummary: Codable, Equatable, Identifiable, Sendable {
+    let id: ActivityID
+    let startedAt: Timestamp
+    let lastPointAt: Timestamp?
+    var completedAt: Timestamp? = nil
+    var importedAt: Timestamp? = nil
+    var origin: ActivityOrigin = .legacyUnknown
+    var status: ActivityStatus = .completed
+    let pointCount: Int
+    var sourceRevision: Int64 = 0
+}
+
+struct ActiveRecording: Equatable, Sendable {
+    let summary: ActivitySummary
+    let phase: RecordingPhase
+    let segmentID: SegmentID
+    let recordingStartedAt: Timestamp
+    var id: ActivityID { summary.id }
+}
+
+struct TrackSegment: Equatable, Identifiable, Sendable {
+    let id: SegmentID
+    let ordinal: Int
+    let boundary: SegmentBoundary
+    let recordingStartedAt: Timestamp?
+    let recordingStoppedAt: Timestamp?
+    let points: [TrackPoint]
+}
+
+struct RecordedTrack: Equatable, Sendable {
+    let activityID: ActivityID
+    let sourceRevision: Int64
+    let segments: [TrackSegment]
+
+    /// GPX carries observations and original nonempty boundaries, never inferred gaps.
+    var gpx: GPXTrack { GPXTrack(segments: segments.filter { !$0.points.isEmpty }.map { GPXSegment(points: $0.points) }) }
+}
+
+enum ContinuityBreak: Equatable, Sendable { case sourceBoundary, timeGap(milliseconds: Int64) }
+
+struct TrackSection: Equatable, Sendable {
+    let sourceSegmentID: SegmentID
+    let breakBefore: ContinuityBreak?
+    let points: [TrackPoint]
+}
+
+struct TrackGeometry: Equatable, Sendable {
+    let activityID: ActivityID
+    let sourceRevision: Int64
+    let sections: [TrackSection]
+}
+
+/// The sole continuity rule for maps, statistics and thumbnails. Source segments
+/// are never modified. A gap of exactly 30 seconds remains connected.
+enum TrackContinuityPolicy {
+    static let maximumGapMilliseconds: Int64 = 30_000
+
+    static func geometry(for track: RecordedTrack) -> TrackGeometry {
+        var sections: [TrackSection] = []
+        for segment in track.segments {
+            var points: [TrackPoint] = []
+            var boundary: ContinuityBreak? = sections.isEmpty ? nil : .sourceBoundary
+            for point in segment.points {
+                if let previous = points.last {
+                    let gap = point.timestampMilliseconds - previous.timestampMilliseconds
+                    if gap > maximumGapMilliseconds {
+                        sections.append(TrackSection(sourceSegmentID: segment.id, breakBefore: boundary, points: points))
+                        points = []
+                        boundary = .timeGap(milliseconds: gap)
+                    }
+                }
+                points.append(point)
+            }
+            if !points.isEmpty { sections.append(TrackSection(sourceSegmentID: segment.id, breakBefore: boundary, points: points)) }
+        }
+        return TrackGeometry(activityID: track.activityID, sourceRevision: track.sourceRevision, sections: sections)
+    }
+}
+
+struct ActivityDetails: Sendable {
+    let activity: ActivitySummary
+    let geometry: TrackGeometry
+}
+
+struct ActivityStatistics: Codable, Equatable, Sendable {
+    var elapsedDurationMilliseconds: Int64 = 0
+    var distanceMeters = 0.0
+    var elevationGainMeters = 0.0
+    var elevationLossMeters = 0.0
+    var maximumElevationMeters: Double?
+    var minimumElevationMeters: Double?
+
+    init() {}
+    init(activity: ActivitySummary, geometry: TrackGeometry) {
+        elapsedDurationMilliseconds = max(0, (activity.lastPointAt ?? activity.startedAt).millisecondsSince1970 - activity.startedAt.millisecondsSince1970)
+        for section in geometry.sections {
+            for elevation in section.points.compactMap(\.elevationMeters) {
+                maximumElevationMeters = max(maximumElevationMeters ?? elevation, elevation)
+                minimumElevationMeters = min(minimumElevationMeters ?? elevation, elevation)
+            }
+            for (a, b) in zip(section.points, section.points.dropFirst()) {
+                let latitudeDelta = (b.latitude - a.latitude) * .pi / 180
+                let longitudeDelta = (b.longitude - a.longitude) * .pi / 180
+                let h = min(1, max(0, pow(sin(latitudeDelta / 2), 2)
+                    + cos(a.latitude * .pi / 180) * cos(b.latitude * .pi / 180) * pow(sin(longitudeDelta / 2), 2)))
+                distanceMeters += 6_371_000 * 2 * atan2(sqrt(h), sqrt(1 - h))
+                if let previous = a.elevationMeters, let current = b.elevationMeters {
+                    let delta = current - previous
+                    if delta.isFinite {
+                        elevationGainMeters += max(0, delta)
+                        elevationLossMeters += max(0, -delta)
+                    }
+                }
+            }
+        }
+    }
+}
+
+enum ActivityError: LocalizedError, Sendable {
+    case missing, invalidTransition, invalidPoint, conflictingPoint(Int64), storage(String), multipleRecordings, invalidData(String), staleAnalysis
+
+    var errorDescription: String? {
+        switch self {
+        case .missing: "This activity is no longer available."
+        case .invalidTransition: "The recording changed. Refresh before continuing."
+        case .invalidPoint: "A location sample is invalid or outside the recording interval."
+        case .conflictingPoint(let timestamp): "A different location already exists at \(timestamp). The original point was preserved."
+        case .storage(let message): "Storage is unavailable. Recording has stopped accepting points. \(message)"
+        case .multipleRecordings: "Multiple open recordings were found. No new recording was started."
+        case .invalidData(let message): "The activity data could not be read: \(message)"
+        case .staleAnalysis: "The activity changed while it was being processed. Please retry."
+        }
+    }
+}

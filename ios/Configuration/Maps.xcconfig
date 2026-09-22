@@ -1,0 +1,7 @@
+// The empty expansion keeps // from starting an xcconfig comment.
+SUNOH_MAP_STYLE_URL = https:/$()/tiles.samuel-cristobal.workers.dev/v1-rc/style.json
+SUNOH_MAP_ACCESS_CLIENT_ID =
+SUNOH_MAP_ACCESS_CLIENT_SECRET =
+
+// Maps.local.xcconfig is set by this repository's token command; keep it out of Git.
+#include? "Maps.local.xcconfig"

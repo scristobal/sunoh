@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.topografix.gpx</string>
+			<key>UTTypeDescription</key>
+			<string>GPX Recording</string>
+			<key>UTTypeConformsTo</key>
+			<array><string>public.xml</string></array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array><string>gpx</string></array>
+				<key>public.mime-type</key>
+				<string>application/gpx+xml</string>
+			</dict>
+		</dict>
+	</array>
+	<key>SunohMapStyleURL</key>
+	<string>$(SUNOH_MAP_STYLE_URL)</string>
+	<key>SunohMapAccessClientID</key>
+	<string>$(SUNOH_MAP_ACCESS_CLIENT_ID)</string>
+	<key>SunohMapAccessClientSecret</key>
+	<string>$(SUNOH_MAP_ACCESS_CLIENT_SECRET)</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Sunō keeps your location active to show your position and record your route, including in the background. Pausing stops saving points while location stays active.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Sunō keeps location updates active in the background. Points are saved only while recording; you can pause saving at any time.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>sunoh</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

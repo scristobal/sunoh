@@ -1,0 +1,32 @@
+set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
+set dotenv-load
+set positional-arguments
+
+# Map-package publication and verification in local or cloud storage.
+mod package 'just/package.just'
+
+# Worker source, local serving and build operations.
+mod worker 'just/worker.just'
+
+# Terraform infrastructure, state and Worker deployment management.
+mod terraform 'just/terraform.just'
+
+# Cloudflare Access service-token operations.
+mod token 'just/token.just'
+
+# Account and path setup, authentication and resource provisioning.
+mod configure 'just/configure.just'
+
+# Show all delivery commands.
+[default]
+[private]
+default:
+    @just --list --list-submodules
+
+# Install the pinned Worker and local-tool dependencies with npm ci.
+install:
+    npm ci
+
+# Check Worker types, local tools and environment keys without starting servers.
+check:
+    npm run check

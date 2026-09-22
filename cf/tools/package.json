@@ -1,0 +1,23 @@
+{
+  "name": "@sunoh/tools",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "authorize": "node authorize.ts",
+    "configure": "node configure.ts",
+    "environment": "node environment-cli.ts",
+    "publish": "node publish.ts",
+    "verify": "node verify.ts",
+    "check": "tsc --noEmit && node environment.ts",
+    "test": "node --test tests/*.test.mjs",
+    "terraform": "node infrastructure.ts",
+    "credentials": "node credentials.ts",
+    "token": "node token.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1133.0",
+    "envalid": "8.2.0",
+    "miniflare": "5.20260915.0-alpha"
+  }
+}

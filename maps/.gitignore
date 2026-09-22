@@ -1,0 +1,16 @@
+.DS_Store
+/.venv/
+/.snakemake/
+/config.local.toml
+/config.local.mk
+/data/
+/downloads/
+/geometry/
+/tiles/
+/resources/
+/package/
+/package.part/
+/scratch/
+/bundle/
+__pycache__/
+*.pyc

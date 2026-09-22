@@ -1,0 +1,19 @@
+{
+  "name": "sunoh-tile-service",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "worker",
+    "tools"
+  ],
+  "scripts": {
+    "check": "npm run check --workspaces",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260916.1",
+    "@types/node": "26.6.1",
+    "typescript": "7.0.2",
+    "wrangler": "4.132.0"
+  }
+}

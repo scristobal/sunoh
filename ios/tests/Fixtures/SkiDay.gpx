@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic observations for GPX interoperability and Simulator QA; no personal data. -->
+<gpx version="1.1" creator="Sunō Test Fixture" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk>
+    <name>Synthetic ski day</name>
+    <trkseg>
+      <trkpt lat="47.0400" lon="10.6040"><ele>2100.5</ele><time>2026-02-01T09:00:00.125Z</time></trkpt>
+      <trkpt lat="47.0405" lon="10.6050"><ele>2080.25</ele><time>2026-02-01T09:00:10.250Z</time></trkpt>
+      <trkpt lat="47.0410" lon="10.6060"><ele>2060</ele><time>2026-02-01T09:00:20.375Z</time></trkpt>
+      <trkpt lat="47.0415" lon="10.6070"><ele>2040.75</ele><time>2026-02-01T09:00:30.500Z</time></trkpt>
+    </trkseg>
+    <trkseg>
+      <trkpt lat="47.0420" lon="10.6080"><ele>2020</ele><time>2026-02-01T09:05:00.625Z</time></trkpt>
+      <trkpt lat="47.0425" lon="10.6090"><ele>2000</ele><time>2026-02-01T09:05:10.750Z</time></trkpt>
+      <trkpt lat="47.0430" lon="10.6100"><time>2026-02-01T09:05:20.875Z</time></trkpt>
+      <trkpt lat="47.0435" lon="10.6110"><ele>1960.5</ele><time>2026-02-01T09:05:30.999Z</time></trkpt>
+    </trkseg>
+  </trk>
+</gpx>
