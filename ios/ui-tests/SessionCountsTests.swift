@@ -5,14 +5,14 @@ import XCTest
         guard let app = openActivity(scenario: "ski-session") else { return }
         let overview = app.scrollViews["activity-overview-scroll"]
         assertCounts(in: overview)
-        capture(app, name: "Summary retains the session totals above evenly spaced run metrics")
-        assertRunMetricColumns(in: overview)
+        capture(app, name: "Summary presents twelve statistics in one grid")
+        assertMetricGrid(in: overview)
         XCTAssertFalse(overview.staticTexts["Session"].exists)
         XCTAssertFalse(overview.staticTexts["Ski areas"].exists)
         overview.swipeUp()
-        capture(app, name: "Run metrics use three columns without a section heading")
+        capture(app, name: "Statistics use four rows and three columns without section headings")
         overview.swipeUp()
-        capture(app, name: "Run statistics end without lift metrics or a vertical timeline")
+        capture(app, name: "The single statistics grid ends without lift metrics or a vertical timeline")
         revealMap(app)
         app.buttons["open-activity-map"].tap()
         XCTAssertTrue(app.buttons["close-activity-details"].waitForExistence(timeout: 10))
@@ -34,8 +34,10 @@ import XCTest
         let overview = app.scrollViews["activity-overview-scroll"]
         XCTAssertTrue(overview.descendants(matching: .any).matching(identifier: "no-elevation-state").firstMatch.exists)
         assertSteepness(in: overview, run: "—")
-        assertMetrics([("Trips", "1"), ("Speed", "6.0 km/h"), ("Top speed", "11.6 km/h"), ("Tallest", "—"),
-                       ("Longest", "485 m"), ("Distance", "485 m"), ("Time", "4m"), ("Descent", "0 m")], group: "runs", in: overview)
+        assertMetrics([("Total duration", "4m"), ("Total distance", "485 m"), ("Vertical", "0 m"),
+                       ("Runs", "1"), ("Time on runs", "4m"), ("Distance on runs", "485 m"),
+                       ("Average speed", "6.0 km/h"), ("Top speed", "11.6 km/h"),
+                       ("Tallest run", "—"), ("Longest run", "485 m")], in: overview)
         assertRemovedMetrics(in: overview)
         app.scrollViews["activity-overview-scroll"].swipeUp()
         capture(app, name: "Run movement metrics remain available without elevation")
@@ -47,7 +49,7 @@ import XCTest
         guard let app = openActivity(scenario: "classified-map") else { return }
         let overview = app.scrollViews["activity-overview-scroll"]
         assertSteepness(in: overview, run: "15.4%", steepestRun: "27.8%")
-        assertMetrics([("Trips", "2")], group: "runs", in: overview)
+        assertMetrics([("Runs", "2")], in: overview)
         assertRemovedMetrics(in: overview)
         capture(app, name: "Classified overview map with blue outside-lift routes and a green lift")
         app.buttons["open-activity-map"].tap()
@@ -70,7 +72,7 @@ import XCTest
 
     private func assertMapHasNoAggregates(_ app: XCUIApplication) {
         let sheet = app.descendants(matching: .any).matching(identifier: "map-details-sheet").firstMatch
-        for identifier in ["activity-statistics-session", "activity-statistics-runs", "activity-statistics-lifts", "activity-timeline", "map-details-scroll"] {
+        for identifier in ["activity-statistics", "activity-statistics-session", "activity-statistics-runs", "activity-statistics-lifts", "activity-timeline", "map-details-scroll"] {
             XCTAssertFalse(sheet.descendants(matching: .any).matching(identifier: identifier).firstMatch.exists)
         }
         for identifier in ["timeline-activity-title", "timeline-point-count", "timeline-quality-level", "timeline-feature-name", "timeline-match-coverage"] {
@@ -208,65 +210,65 @@ import XCTest
     private func assertCounts(in scroll: XCUIElement) {
         XCTAssertTrue(scroll.waitForExistence(timeout: 10))
         assertSteepness(in: scroll, run: "26.0%")
-        assertMetrics([("Duration", "12m"), ("Distance", "4.0 km"), ("Descent", "750 m")], group: "session", in: scroll)
-        assertMetrics([("Trips", "3"), ("Time", "6m"), ("Distance", "2.9 km"), ("Descent", "750 m"),
-                       ("Speed", "28.8 km/h"), ("Top speed", "28.8 km/h"), ("Tallest", "250 m"), ("Longest", "960 m")], group: "runs", in: scroll)
+        assertMetrics([("Total duration", "12m"), ("Total distance", "4.0 km"), ("Vertical", "750 m"),
+                       ("Runs", "3"), ("Time on runs", "6m"), ("Distance on runs", "2.9 km"),
+                       ("Average speed", "28.8 km/h"), ("Top speed", "28.8 km/h"),
+                       ("Tallest run", "250 m"), ("Longest run", "960 m")], in: scroll)
         assertRemovedMetrics(in: scroll)
     }
 
-    private func statisticsGroup(_ group: String, in scroll: XCUIElement) -> XCUIElement {
-        let container = scroll.descendants(matching: .any).matching(identifier: "activity-statistics-\(group)").firstMatch
+    private func statistics(in scroll: XCUIElement) -> XCUIElement {
+        let container = scroll.descendants(matching: .any).matching(identifier: "activity-statistics").firstMatch
         XCTAssertTrue(container.exists || container.waitForExistence(timeout: 15))
         return container
     }
 
-    private func assertMetrics(_ expected: [(String, String)], group: String, in scroll: XCUIElement) {
-        let container = statisticsGroup(group, in: scroll)
+    private func assertMetrics(_ expected: [(String, String)], in scroll: XCUIElement) {
+        let container = statistics(in: scroll)
         for (label, value) in expected {
             let metric = container.descendants(matching: .any).matching(NSPredicate(format: "label == %@", label)).firstMatch
             XCTAssertTrue(metric.exists || metric.waitForExistence(timeout: 15))
-            XCTAssertEqual(metric.value as? String, value, "\(group): \(label)")
+            XCTAssertEqual(metric.value as? String, value, label)
         }
     }
 
     private func assertSteepness(in scroll: XCUIElement, run: String, steepestRun: String? = nil) {
-        assertMetrics([("Steep", run), ("Steepest", steepestRun ?? run)], group: "runs", in: scroll)
+        assertMetrics([("Average steep", run), ("Steepest run", steepestRun ?? run)], in: scroll)
     }
 
-    private func assertRunMetricColumns(in scroll: XCUIElement) {
-        let session = statisticsGroup("session", in: scroll)
-        let runs = statisticsGroup("runs", in: scroll)
-        func metric(_ label: String, in group: XCUIElement) -> XCUIElement {
-            group.descendants(matching: .any).matching(NSPredicate(format: "label == %@", label)).firstMatch
+    private func assertMetricGrid(in scroll: XCUIElement) {
+        let container = statistics(in: scroll)
+        func metric(_ label: String) -> XCUIElement {
+            container.descendants(matching: .any).matching(NSPredicate(format: "label == %@", label)).firstMatch
         }
-        let columnCenters = ["Duration", "Distance", "Descent"].map { metric($0, in: session).frame.midX }
-        let rows = [["Trips", "Time", "Distance"], ["Descent", "Speed", "Top speed"],
-                    ["Tallest", "Longest", "Steep"], ["Steepest"]]
+        let rows = [["Total duration", "Total distance", "Vertical"], ["Runs", "Time on runs", "Distance on runs"],
+                    ["Average speed", "Top speed", "Average steep"], ["Tallest run", "Longest run", "Steepest run"]]
+        let columnCenters = rows[0].map { metric($0).frame.midX }
         var previousBottom: CGFloat?
         for labels in rows {
-            let elements = labels.map { metric($0, in: runs) }
+            let elements = labels.map { metric($0) }
             let frames = elements.map(\.frame)
             for (column, frame) in frames.enumerated() {
                 XCTAssertEqual(frame.midX, columnCenters[column], accuracy: 2,
-                               "Run metrics should use the same three columns as the session totals.")
+                               "All twelve statistics should align in the same three columns.")
                 XCTAssertEqual(frame.midY, frames[0].midY, accuracy: 2)
             }
             if let previousBottom, let top = frames.map(\.minY).min() {
-                XCTAssertGreaterThan(top, previousBottom, "Run metric rows should have space between them.")
+                XCTAssertGreaterThan(top, previousBottom, "The four statistic rows should have space between them.")
             }
             previousBottom = frames.map(\.maxY).max()
         }
     }
 
     private func assertRemovedMetrics(in scroll: XCUIElement) {
-        let session = statisticsGroup("session", in: scroll)
-        for label in ["Ascent", "Total ascent", "Peak", "Lowest"] {
-            XCTAssertFalse(session.descendants(matching: .any).matching(NSPredicate(format: "label == %@", label)).firstMatch.exists)
+        let container = statistics(in: scroll)
+        for label in ["Ascent", "Total ascent", "Peak", "Lowest", "Descent", "Duration", "Distance", "Time", "Speed", "Tallest", "Longest", "Steep", "Steepest"] {
+            XCTAssertFalse(container.descendants(matching: .any).matching(NSPredicate(format: "label == %@", label)).firstMatch.exists)
         }
-        for identifier in ["activity-timeline-toggle", "activity-timeline", "activity-statistics-lifts"] {
+        for identifier in ["activity-timeline-toggle", "activity-timeline", "activity-statistics-session", "activity-statistics-runs", "activity-statistics-lifts"] {
             XCTAssertFalse(scroll.descendants(matching: .any).matching(identifier: identifier).firstMatch.exists)
         }
-        for title in ["Timeline", "Run", "Runs", "Lift", "Lifts"] { XCTAssertFalse(scroll.staticTexts[title].exists) }
+        for title in ["Timeline", "Run", "Lift", "Lifts"] { XCTAssertFalse(scroll.staticTexts[title].exists) }
     }
 
     private func capture(_ app: XCUIApplication, name: String) {

@@ -208,14 +208,6 @@ struct ActivityStatisticsView: View {
     let stats: ActivityStatistics
 
     var body: some View {
-        VStack(alignment: .leading) {
-            statisticsGroup("session", metrics: sessionMetrics)
-            Divider()
-            statisticsGroup("runs", metrics: runMetrics)
-        }
-    }
-
-    private func statisticsGroup(_ identifier: String, metrics: [StatisticsGrid.Metric]) -> some View {
         Grid(alignment: .top) {
             ForEach(Array(stride(from: 0, to: metrics.count, by: 3)), id: \.self) { start in
                 GridRow(alignment: .top) {
@@ -237,29 +229,23 @@ struct ActivityStatisticsView: View {
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("activity-statistics-\(identifier)")
+        .accessibilityIdentifier("activity-statistics")
     }
 
-    private var sessionMetrics: [StatisticsGrid.Metric] {
+    private var metrics: [StatisticsGrid.Metric] {
         [
-            .init(label: "Duration", value: stats.formattedDuration),
-            .init(label: "Distance", value: stats.formattedDistance),
-            .init(label: "Descent", value: elevation(stats.elevationLossMeters))
-        ]
-    }
-
-    private var runMetrics: [StatisticsGrid.Metric] {
-        [
-            .init(label: "Trips", value: stats.runCount.formatted()),
-            .init(label: "Time", value: stats.formattedRunDuration),
-            .init(label: "Distance", value: stats.formattedRunDistance),
-            .init(label: "Descent", value: elevation(stats.runElevationLossMeters)),
-            .init(label: "Speed", value: stats.formattedAverageRunSpeed),
+            .init(label: "Total duration", value: stats.formattedDuration),
+            .init(label: "Total distance", value: stats.formattedDistance),
+            .init(label: "Vertical", value: elevation(stats.elevationLossMeters)),
+            .init(label: "Runs", value: stats.runCount.formatted()),
+            .init(label: "Time on runs", value: stats.formattedRunDuration),
+            .init(label: "Distance on runs", value: stats.formattedRunDistance),
+            .init(label: "Average speed", value: stats.formattedAverageRunSpeed),
             .init(label: "Top speed", value: stats.formattedMaximumRunSpeed),
-            .init(label: "Tallest", value: stats.tallestRunHeightMeters.map(elevation) ?? "—"),
-            .init(label: "Longest", value: stats.formattedLongestRunDistance),
-            .init(label: "Steep", value: stats.formattedAverageRunSteepness),
-            .init(label: "Steepest", value: stats.formattedMaximumRunSteepness)
+            .init(label: "Average steep", value: stats.formattedAverageRunSteepness),
+            .init(label: "Tallest run", value: stats.tallestRunHeightMeters.map(elevation) ?? "—"),
+            .init(label: "Longest run", value: stats.formattedLongestRunDistance),
+            .init(label: "Steepest run", value: stats.formattedMaximumRunSteepness)
         ]
     }
 

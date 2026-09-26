@@ -34,9 +34,7 @@ enum ActivityHeadingFormatting {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.calendar = calendar
         formatter.timeZone = calendar.timeZone
-        formatter.dateFormat = "EEEE d, h:mma"
-        formatter.amSymbol = "am"
-        formatter.pmSymbol = "pm"
+        formatter.dateFormat = "EEEE d, MMMM yyyy"
         return formatter.string(from: activity.startedAt.date)
     }
 }

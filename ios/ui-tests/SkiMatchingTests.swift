@@ -7,7 +7,7 @@ import XCTest
         XCTAssertTrue(saved.waitForExistence(timeout: 15))
         let namedRow = NSPredicate(format: "label CONTAINS %@ AND label CONTAINS %@", "South Bowl", "Valley Pass")
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: namedRow, object: saved)], timeout: 15), .completed)
-        XCTAssertTrue(saved.label.contains("Saturday 25, 2:00am"))
+        XCTAssertTrue(saved.label.contains("Saturday 25, July 2026"))
         XCTAssertFalse(saved.label.contains("saved points"))
         XCTAssertFalse(saved.label.contains("North Peak"))
         let listScreenshot = XCTAttachment(screenshot: app.screenshot())
@@ -20,29 +20,28 @@ import XCTest
         let overviewHeader = app.descendants(matching: .any).matching(identifier: "activity-overview-header").firstMatch
         let resorts = overviewHeader.staticTexts["activity-ski-areas"]
         let date = overviewHeader.staticTexts["activity-heading-date"].label
-        XCTAssertEqual(date, "Saturday 25, 2:00am")
+        XCTAssertEqual(date, "Saturday 25, July 2026")
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: namedRow, object: resorts)], timeout: 15), .completed)
         XCTAssertFalse(resorts.label.contains("North Peak"))
         XCTAssertTrue(resorts.label.contains("South Bowl"))
         XCTAssertTrue(resorts.label.contains("Valley Pass"))
         let resortNames = resorts.label
         XCTAssertFalse(overviewHeader.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "saved points")).firstMatch.exists)
-        let session = scroll.descendants(matching: .any).matching(identifier: "activity-statistics-session").firstMatch
-        XCTAssertTrue(session.waitForExistence(timeout: 10))
-        for label in ["Duration", "Distance", "Descent"] {
-            XCTAssertTrue(session.descendants(matching: .any).matching(NSPredicate(format: "label == %@", label)).firstMatch.exists)
+        let statistics = scroll.descendants(matching: .any).matching(identifier: "activity-statistics").firstMatch
+        XCTAssertTrue(statistics.waitForExistence(timeout: 10))
+        for label in ["Total duration", "Total distance", "Vertical", "Runs", "Time on runs", "Distance on runs",
+                      "Average speed", "Top speed", "Average steep", "Tallest run", "Longest run", "Steepest run"] {
+            XCTAssertTrue(statistics.descendants(matching: .any).matching(NSPredicate(format: "label == %@", label)).firstMatch.exists)
         }
-        let runs = scroll.descendants(matching: .any).matching(identifier: "activity-statistics-runs").firstMatch
-        XCTAssertTrue(runs.exists)
-        let trips = runs.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Trips")).firstMatch
-        XCTAssertEqual(trips.value as? String, "3")
-        for identifier in ["activity-timeline-toggle", "activity-timeline", "activity-statistics-lifts"] {
+        let runs = statistics.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "Runs")).firstMatch
+        XCTAssertEqual(runs.value as? String, "3")
+        for identifier in ["activity-timeline-toggle", "activity-timeline", "activity-statistics-session", "activity-statistics-runs", "activity-statistics-lifts"] {
             XCTAssertFalse(scroll.descendants(matching: .any).matching(identifier: identifier).firstMatch.exists)
         }
-        for title in ["Timeline", "Runs", "Lifts"] { XCTAssertFalse(scroll.staticTexts[title].exists) }
+        for title in ["Timeline", "Lifts", "Descent"] { XCTAssertFalse(scroll.staticTexts[title].exists) }
         assertNoFeatureOrSamplingDetails(in: scroll)
-        reveal(runs, in: scroll)
-        capture(app, name: "Summary retains ski areas and run metrics without timeline or lift statistics")
+        reveal(statistics, in: scroll)
+        capture(app, name: "Summary retains ski areas and a single statistics grid")
         reveal(app.buttons["open-activity-map"], in: scroll)
         app.buttons["open-activity-map"].tap()
         XCTAssertTrue(app.buttons["close-activity-details"].waitForExistence(timeout: 10))

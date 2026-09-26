@@ -11,11 +11,11 @@ import XCTest
         let permission = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons["Allow While Using App"]
         if permission.waitForExistence(timeout: 3) { permission.tap() }
         let activities = app.tabBars.buttons["Activities"]
-        XCTAssertTrue(activities.waitForExistence(timeout: 20))
+        XCTAssertTrue(waitUntilHittable(activities))
         activities.tap()
         let saved = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "activity-row-")).firstMatch
-        XCTAssertTrue(saved.waitForExistence(timeout: 15))
-        XCTAssertTrue(saved.label.contains("Saturday 25, 2:00am"))
+        XCTAssertTrue(waitUntilHittable(saved))
+        XCTAssertTrue(saved.label.contains("Saturday 25, July 2026"))
         saved.tap()
         let overview = app.scrollViews["activity-overview-scroll"]
         XCTAssertTrue(overview.waitForExistence(timeout: 10))
@@ -23,21 +23,21 @@ import XCTest
             app.buttons["close-activity-overview"].isHittable && app.buttons["open-activity-map"].isHittable
         }
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: ready, object: app)], timeout: 10), .completed)
-        XCTAssertEqual(app.staticTexts["activity-heading-date"].label, "Saturday 25, 2:00am")
+        XCTAssertEqual(app.staticTexts["activity-heading-date"].label, "Saturday 25, July 2026")
         let resort = app.staticTexts["activity-ski-areas"]
         let named = NSPredicate(format: "label == %@", "Plateau Mountain")
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: named, object: resort)], timeout: 10), .completed)
-        assertMetrics([("Duration", "10m"), ("Distance", "3.0 km")], group: "session", in: overview)
-        assertMetrics([("Trips", "2"), ("Time", "4m"), ("Distance", "1.9 km"), ("Descent", "500 m"),
-                       ("Speed", "28.8 km/h"), ("Tallest", "250 m"), ("Longest", "960 m")], group: "runs", in: overview)
-        for identifier in ["activity-timeline-toggle", "activity-timeline", "activity-statistics-lifts"] {
+        assertMetrics([("Total duration", "10m"), ("Total distance", "3.0 km"), ("Vertical", "515 m"),
+                       ("Runs", "2"), ("Time on runs", "4m"), ("Distance on runs", "1.9 km"),
+                       ("Average speed", "28.8 km/h"), ("Tallest run", "250 m"), ("Longest run", "960 m")], in: overview)
+        for identifier in ["activity-timeline-toggle", "activity-timeline", "activity-statistics-session", "activity-statistics-runs", "activity-statistics-lifts"] {
             XCTAssertFalse(overview.descendants(matching: .any).matching(identifier: identifier).firstMatch.exists)
         }
-        for title in ["Timeline", "Runs", "Lifts"] { XCTAssertFalse(overview.staticTexts[title].exists) }
+        for title in ["Timeline", "Lifts", "Descent"] { XCTAssertFalse(overview.staticTexts[title].exists) }
         assertNoFeatureOrSamplingDetails(overview)
-        let runs = overview.descendants(matching: .any).matching(identifier: "activity-statistics-runs").firstMatch
-        reveal(runs, in: overview)
-        capture(app, name: "Reference-assisted activity summary retains session and run metrics")
+        let statistics = overview.descendants(matching: .any).matching(identifier: "activity-statistics").firstMatch
+        reveal(statistics, in: overview)
+        capture(app, name: "Reference-assisted activity summary shows one statistics grid")
 
         reveal(app.buttons["open-activity-map"], in: overview)
         app.buttons["open-activity-map"].tap()
@@ -80,6 +80,11 @@ import XCTest
         XCTAssertEqual(card.descendants(matching: .any).matching(identifier: "activity-elevation-profile").firstMatch.staticTexts["elevation-profile-duration"].label, "6m")
     }
 
+    private func waitUntilHittable(_ element: XCUIElement) -> Bool {
+        let ready = NSPredicate { _, _ in element.exists && element.isHittable }
+        return XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: ready, object: element)], timeout: 20) == .completed
+    }
+
     private func assertRun(_ row: XCUIElement, number: Int) {
         assertCard(row, position: "run \(number) of 2")
         XCTAssertEqual(row.staticTexts["timeline-measurements"].label, "↔ 960 m · ↕︎ 250 m")
@@ -111,13 +116,13 @@ import XCTest
         XCTAssertFalse(row.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Plateau Express")).firstMatch.exists)
     }
 
-    private func assertMetrics(_ expected: [(String, String)], group: String, in overview: XCUIElement) {
-        let container = overview.descendants(matching: .any).matching(identifier: "activity-statistics-\(group)").firstMatch
+    private func assertMetrics(_ expected: [(String, String)], in overview: XCUIElement) {
+        let container = overview.descendants(matching: .any).matching(identifier: "activity-statistics").firstMatch
         XCTAssertTrue(container.waitForExistence(timeout: 10))
         for (label, value) in expected {
             let metric = container.descendants(matching: .any).matching(NSPredicate(format: "label == %@", label)).firstMatch
             XCTAssertTrue(metric.exists)
-            XCTAssertEqual(metric.value as? String, value, "\(group): \(label)")
+            XCTAssertEqual(metric.value as? String, value, label)
         }
     }
 

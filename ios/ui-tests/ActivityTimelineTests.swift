@@ -6,7 +6,7 @@ import XCTest
         guard let app = launchTimelineApp(), openSavedActivity(app) else { return }
         let overview = app.scrollViews["activity-overview-scroll"]
         let heading = app.descendants(matching: .any).matching(identifier: "activity-overview-header").firstMatch
-        XCTAssertEqual(heading.staticTexts["activity-heading-date"].label, "Saturday 25, 2:00am")
+        XCTAssertEqual(heading.staticTexts["activity-heading-date"].label, "Saturday 25, July 2026")
         XCTAssertFalse(heading.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "saved points")).firstMatch.exists)
         XCTAssertFalse(app.navigationBars["Activity"].exists)
         XCTAssertFalse(overview.staticTexts["Ski areas"].exists)
@@ -18,17 +18,15 @@ import XCTest
         XCTAssertEqual(map.frame.width, map.frame.height, accuracy: 2)
         XCTAssertGreaterThanOrEqual(profile.frame.minY, map.frame.maxY)
         XCTAssertEqual(profile.frame.height, map.frame.height / 4, accuracy: 3)
-        for identifier in ["activity-timeline-toggle", "activity-timeline", "activity-statistics-lifts"] {
+        for identifier in ["activity-timeline-toggle", "activity-timeline", "activity-statistics-session", "activity-statistics-runs", "activity-statistics-lifts"] {
             XCTAssertFalse(overview.descendants(matching: .any).matching(identifier: identifier).firstMatch.exists)
         }
-        for title in ["Timeline", "Run", "Runs", "Lift", "Lifts"] { XCTAssertFalse(overview.staticTexts[title].exists) }
-        for group in ["session", "runs"] {
-            XCTAssertTrue(overview.descendants(matching: .any).matching(identifier: "activity-statistics-\(group)").firstMatch.exists)
-        }
+        for title in ["Timeline", "Run", "Lift", "Lifts"] { XCTAssertFalse(overview.staticTexts[title].exists) }
+        XCTAssertEqual(overview.descendants(matching: .any).matching(identifier: "activity-statistics").count, 1)
         overview.swipeUp()
-        capture(app, name: "Summary keeps session totals and run metrics without section headings")
+        capture(app, name: "Summary presents totals and run metrics in one statistics grid")
         overview.swipeUp()
-        capture(app, name: "Summary ends after the run metrics without a vertical timeline or lift group")
+        capture(app, name: "Summary ends after four statistic rows without a vertical timeline or lift group")
         app.buttons["close-activity-overview"].tap()
         XCTAssertFalse(overview.exists)
         XCTAssertTrue(app.tabBars.buttons["Activities"].isHittable)
@@ -48,7 +46,7 @@ import XCTest
         let sheet = app.descendants(matching: .any).matching(identifier: "map-details-sheet").firstMatch
         let card = app.descendants(matching: .any).matching(identifier: "activity-section-card").firstMatch
         XCTAssertFalse(sectionFooterIsVisible(in: app))
-        for identifier in ["activity-statistics-session", "activity-statistics-runs", "activity-statistics-lifts", "activity-timeline", "map-details-scroll"] {
+        for identifier in ["activity-statistics", "activity-statistics-session", "activity-statistics-runs", "activity-statistics-lifts", "activity-timeline", "map-details-scroll"] {
             XCTAssertFalse(sheet.descendants(matching: .any).matching(identifier: identifier).firstMatch.exists)
         }
         let compactTop = header.frame.minY
@@ -185,7 +183,7 @@ import XCTest
         app.tabBars.buttons["Activities"].tap()
         let activity = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "activity-row-")).firstMatch
         guard waitUntilHittable(activity) else { return false }
-        XCTAssertTrue(activity.label.contains("Saturday 25, 2:00am"))
+        XCTAssertTrue(activity.label.contains("Saturday 25, July 2026"))
         activity.tap()
         XCTAssertTrue(app.scrollViews["activity-overview-scroll"].waitForExistence(timeout: 10))
         let ready = NSPredicate { _, _ in
