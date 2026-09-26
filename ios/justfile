@@ -8,7 +8,7 @@ SCHEME := "Sunoh"
 BUNDLE_ID := "com.samuel.sunoh"
 DERIVED := justfile_directory() / ".build"
 APP := DERIVED / "Build/Products/Debug-iphonesimulator/Sunoh.app"
-SEED := env("SEED", justfile_directory() / ".local/seed.jsonl")
+SEED := env("SEED", justfile_directory() / ".local/seed")
 PHONE_UDID := `printenv PHONE_UDID || xcrun simctl list devices available -j | python3 scripts/simulator.py`
 
 # List development commands without starting an operation.
@@ -40,17 +40,28 @@ test *args: phone
 gps: phone
     python3 scripts/gps.py DebugRoute.gpx | xcrun simctl location {{ quote(PHONE_UDID) }} start --speed=5 -
 
+# Create the offline ski-feature packages outside the repository.
+ski-data source output:
+    python3 scripts/ski_data.py "$1" "$2" --zip
+
 # Prompt for map service credentials and save the private app build configuration.
 token:
     @python3 scripts/credentials.py
 
 [private]
 source:
-    @test -f {{ quote(SEED) }} && test -r {{ quote(SEED) }} && test -s {{ quote(SEED) }} || (printf 'Seed file is missing, empty or unreadable: %s\nUse just SEED=/path/to/seed.jsonl seed\n' {{ quote(SEED) }}; exit 1)
+    @python3 scripts/seed.py --check {{ quote(SEED) }}
 
-# Import development data with just SEED=/path/to/seed.jsonl seed.
+# Import a GPX file or directory with just SEED=/path/to/tracks seed.
 seed: source build
     xcrun simctl terminate {{ quote(PHONE_UDID) }} {{ quote(BUNDLE_ID) }} 2>/dev/null || true
     xcrun simctl install {{ quote(PHONE_UDID) }} {{ quote(APP) }}
     python3 scripts/seed.py {{ quote(PHONE_UDID) }} {{ quote(BUNDLE_ID) }} {{ quote(SEED) }}
+    python3 scripts/simulator.py --open
+
+# Delete all activities, including unfinished recordings, from the selected simulator.
+clean: build
+    xcrun simctl terminate {{ quote(PHONE_UDID) }} {{ quote(BUNDLE_ID) }} 2>/dev/null || true
+    xcrun simctl install {{ quote(PHONE_UDID) }} {{ quote(APP) }}
+    python3 scripts/clean.py {{ quote(PHONE_UDID) }} {{ quote(BUNDLE_ID) }}
     python3 scripts/simulator.py --open

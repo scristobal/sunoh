@@ -286,7 +286,7 @@ import XCTest
     func testEmptyHistoryAndProfile() throws {
         let app = launch(category: "UICTContentSizeCategoryAccessibilityXXXL", scenario: "empty")
         app.tabBars.buttons["Activities"].tap()
-        XCTAssertTrue(app.staticTexts["No past activities yet"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["No activities"].waitForExistence(timeout: 10))
         try audit(app, name: "empty-activities-accessibility")
         app.scrollViews.firstMatch.swipeUp()
         try audit(app, name: "empty-activities-bottom-accessibility")

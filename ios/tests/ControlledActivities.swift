@@ -19,6 +19,10 @@ actor ControlledActivities: ActivityPersistence {
     private var operationStarted = false
     private var operationWaiter: CheckedContinuation<Void, Never>?
     private var operationRelease: CheckedContinuation<Void, Never>?
+    private var blockAnalysisRead = false
+    private var analysisReadStarted = false
+    private var analysisReadWaiter: CheckedContinuation<Void, Never>?
+    private var analysisReadRelease: CheckedContinuation<Void, Never>?
 
     init(repository: ActivityRepository, clock: ControlledClock) { self.repository = repository; self.clock = clock }
     static func create() async throws -> ControlledActivities {
@@ -43,6 +47,12 @@ actor ControlledActivities: ActivityPersistence {
         await withCheckedContinuation { operationWaiter = $0 }
     }
     func releaseOperation() { operationRelease?.resume(); operationRelease = nil }
+    func blockNextStoredAnalysis() { blockAnalysisRead = true; analysisReadStarted = false }
+    func waitForStoredAnalysis() async {
+        if analysisReadStarted { return }
+        await withCheckedContinuation { analysisReadWaiter = $0 }
+    }
+    func releaseStoredAnalysis() { analysisReadRelease?.resume(); analysisReadRelease = nil }
     private func perform(_ operation: RecordingOperation) async throws {
         if blockedOperation == operation {
             blockedOperation = nil; operationStarted = true
@@ -77,7 +87,14 @@ actor ControlledActivities: ActivityPersistence {
     }
     func details(id: ActivityID) async throws -> ActivityDetails { try await repository.details(id: id) }
     func recordedTrack(id: ActivityID) async throws -> RecordedTrack { try await repository.recordedTrack(id: id) }
-    func storedAnalysis(id: ActivityID) async throws -> ActivityAnalysis? { try await repository.storedAnalysis(id: id) }
+    func storedAnalysis(id: ActivityID) async throws -> ActivityAnalysis? {
+        if blockAnalysisRead {
+            blockAnalysisRead = false; analysisReadStarted = true
+            analysisReadWaiter?.resume(); analysisReadWaiter = nil
+            await withCheckedContinuation { analysisReadRelease = $0 }
+        }
+        return try await repository.storedAnalysis(id: id)
+    }
     func processingInput(id: ActivityID) async throws -> ActivityProcessingInput { try await repository.processingInput(id: id) }
     func saveAnalysis(_ result: ActivityAnalysis) async throws { try await repository.saveAnalysis(result) }
     func importTracks(_ tracks: [GPXTrack]) async throws -> GPXImportResult {

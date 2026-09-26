@@ -3,6 +3,7 @@ import SwiftUI
 /// Native sheet sizing follows the header's laid-out height, including text
 /// wrapping and Dynamic Type. SwiftUI owns the safe areas and drag interaction.
 struct MapDetailsSheet<Header: View, Details: View>: View {
+    var pinsHeader = false
     @ViewBuilder let header: () -> Header
     @ViewBuilder let details: () -> Details
     @State private var selection: PresentationDetent = .large
@@ -23,28 +24,31 @@ struct MapDetailsSheet<Header: View, Details: View>: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack {
-                header()
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding()
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
-                        guard height > 0 else { return }
-                        let keepCompact = isCompact
-                        headerHeight = height
-                        if keepCompact { selection = .height(height) }
-                    }
-
-                details()
+        // The compact detent fits the padded header without extra stack spacing.
+        VStack(spacing: 0) {
+            if pinsHeader {
+                measuredHeader
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
-                    .accessibilityHidden(isCompact)
+                    .background(Color(uiColor: .systemBackground))
             }
+
+            ScrollView {
+                VStack {
+                    if !pinsHeader { measuredHeader }
+
+                    details()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                        .accessibilityHidden(isCompact)
+                }
+            }
+            .scrollPosition($scrollPosition)
+            .scrollDisabled(isCompact)
+            .scrollBounceBehavior(.basedOnSize)
+            .accessibilityIdentifier("map-details-scroll")
         }
-        .scrollPosition($scrollPosition)
-        .scrollDisabled(isCompact)
-        .scrollBounceBehavior(.basedOnSize)
-        .accessibilityIdentifier("map-details-scroll")
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("map-details-sheet")
         .presentationDetents(detents, selection: $selection)
         .presentationDragIndicator(.visible)
         .presentationBackgroundInteraction(.enabled)
@@ -56,6 +60,20 @@ struct MapDetailsSheet<Header: View, Details: View>: View {
         .onChange(of: dynamicTypeSize) {
             if dynamicTypeSize.isAccessibilitySize, selection == .medium { selection = .large }
         }
+    }
+
+    private var measuredHeader: some View {
+        header()
+            .fixedSize(horizontal: false, vertical: true)
+            .padding()
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                guard height > 0 else { return }
+                let keepCompact = isCompact
+                headerHeight = height
+                if keepCompact { selection = .height(height) }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("map-details-header")
     }
 }
 

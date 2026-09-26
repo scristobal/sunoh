@@ -49,8 +49,7 @@ enum TrackThumbnail {
         return data as Data
     }
 
-    /// Fits a north-up Mercator drawing without stretching, joining gaps, or wrapping
-    /// a short antimeridian crossing around the world. This is only display geometry.
+    /// Fits a north-up Mercator drawing without stretching, joining source segments, or wrapping a short antimeridian crossing around the world. This is only display geometry.
     static func paths(geometry: TrackGeometry, in bounds: CGRect) -> [[CGPoint]] {
         guard bounds.width > 0, bounds.height > 0,
               let origin = geometry.sections.lazy.flatMap(\.points).first else { return [] }
@@ -61,11 +60,8 @@ enum TrackThumbnail {
             var path: [CGPoint] = []
             for point in section.points {
                 guard !Task.isCancelled else { return [] }
-                var x = point.longitude - origin.longitude
-                if x > 180 { x -= 360 }
-                if x < -180 { x += 360 }
-                let latitude = min(85.05112878, max(-85.05112878, point.latitude)) * .pi / 180
-                let y = -asinh(tan(latitude)) * 180 / .pi
+                let projectedPoint = Geo.mercatorProjection(of: point.coordinate, relativeTo: origin.coordinate)
+                let x = projectedPoint.x, y = projectedPoint.y
                 minX = min(minX, x); maxX = max(maxX, x)
                 minY = min(minY, y); maxY = max(maxY, y)
                 path.append(CGPoint(x: x, y: y))

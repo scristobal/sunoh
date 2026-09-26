@@ -16,11 +16,21 @@
 
 ## Analysis and data exchange
 
+- Keep geographic calculations pure and separate from recording, persistence and presentation.
 - Derive summaries, route presentation and previews from the same recording while keeping original observations intact. Display gaps and calculated values must not rewrite the recorded source.
+- Keep activity type, sampling quality and source recording boundaries separate. Preserve explicit recording and imported segment boundaries in measurements and route drawing.
+- Classify recorded intervals as Lift or Run for now. Detect lift rides and treat all remaining recorded time as Run, including stops, traverses and leading or trailing time. Keep internal lift stops within the lift ride and preserve explicit recording breaks separately.
+- Use lift reference geometry as supporting evidence for classification. Missing or conflicting reference data must not veto a lift supported by recorded motion.
+- Categorizing time within runs as skiing, snowboarding, transfers or stops is deferred.
+- Do not read, persist or present piste or lift names in activity analysis, or expose track-matching ratings. Keep confidence calculations used for lift detection and retain resort identities and names.
+- Apply data-quality gates per derivation, including map display, speed and activity classification, rather than through a shared sampling-gap cutoff. Implementing those gates is deferred; do not add a replacement global cutoff in the meantime.
+- Rate sampling quality from the interval distribution and the time those intervals represent. Do not let the single longest interval determine an entry's rating.
+- Extend recording quality with measurement-error estimation in a later step. Until then, describe the rating as sampling quality and do not imply that it measures positional accuracy.
 - Persist statistics and route thumbnails together as derived results. Keep them consistent with the source and rebuild missing or outdated results without losing the recording.
 - Failures in history loading, analysis or previews must not stop healthy recording. Keep original activity details usable when derived work fails.
 - Export what the recorder provided: timestamps, coordinates, optional recorded elevation and segment boundaries. Do not substitute calculated statistics or inferred samples. Sharing previews must not change the exported recording.
 - Preserve existing recordings during data exchange and keep history responsive as it grows. Detailed import and export behavior belongs in executable checks.
+- Use GPX as the external format for development track seeds. Keep app-specific storage fields out of seed files.
 
 ## Interaction and accessibility
 

@@ -44,7 +44,7 @@ import Observation
     }
 
     func details(id: ActivityID) async throws -> ActivityDetails { try await repository.details(id: id) }
-    func analysis(id: ActivityID) async throws -> ActivityAnalysis { try await processor.process(id: id) }
+    func analysis(id: ActivityID, force: Bool = false) async throws -> ActivityAnalysis { try await processor.process(id: id, force: force) }
 
     func thumbnail(id: ActivityID) async -> Data? {
         if let data = thumbnails.object(forKey: id.rawValue as NSString) { return data as Data }

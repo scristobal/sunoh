@@ -141,8 +141,3 @@ enum ActivitySchemaV1: VersionedSchema {
         }
     }
 }
-
-typealias StoredActivity = ActivitySchemaV1.StoredActivity
-typealias StoredTrackSegment = ActivitySchemaV1.StoredTrackSegment
-typealias StoredTrackPoint = ActivitySchemaV1.StoredTrackPoint
-typealias StoredActivityAnalysis = ActivitySchemaV1.StoredActivityAnalysis

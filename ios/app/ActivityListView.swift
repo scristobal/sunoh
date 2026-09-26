@@ -7,37 +7,6 @@ extension ActivitySummary {
         startedAt.date
     }
 
-    var dayLabel: String {
-        let formatter = DateFormatter()
-        formatter.setLocalizedDateFormatFromTemplate("EEEEdjm")
-        return formatter.string(from: startDate)
-    }
-
-    /// Standalone presentations need the month and year that the history's
-    /// section heading supplies to its shorter row date.
-    var dateIntervalLabel: String {
-        let formatter = DateIntervalFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: startDate, to: (lastPointAt ?? startedAt).date)
-    }
-
-    var endLabel: String {
-        let endDate = (lastPointAt ?? startedAt).date
-        let calendar = Calendar.current
-        let formatter = DateFormatter()
-        if calendar.isDate(startDate, inSameDayAs: endDate) {
-            formatter.setLocalizedDateFormatFromTemplate("jm")
-        } else if !calendar.isDate(startDate, equalTo: endDate, toGranularity: .year) {
-            formatter.setLocalizedDateFormatFromTemplate("EEEEdMMMyyyyjm")
-        } else if !calendar.isDate(startDate, equalTo: endDate, toGranularity: .month) {
-            formatter.setLocalizedDateFormatFromTemplate("EEEEdMMMjm")
-        } else {
-            formatter.setLocalizedDateFormatFromTemplate("EEEEdjm")
-        }
-        return formatter.string(from: endDate)
-    }
-
     var year: Int { Calendar.current.component(.year, from: startDate) }
     var month: Int { Calendar.current.component(.month, from: startDate) }
 }
@@ -80,6 +49,7 @@ private struct ActivityRow: View {
     let activity: ActivitySummary
     let library: ActivityLibrary
     let onSelect: () -> Void
+    @State private var skiAreaNames = "Identifying ski areas…"
 
     var body: some View {
         Button(action: onSelect) {
@@ -88,9 +58,9 @@ private struct ActivityRow: View {
                     .frame(width: 44, height: 44)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("\(activity.dayLabel) – \(activity.endLabel)")
+                    Text(ActivityHeadingFormatting.title(activity))
                         .font(.headline)
-                    Text("\(activity.pointCount) saved points")
+                    Text(skiAreaNames)
                         .font(.subheadline)
                         .foregroundStyle(.primary)
                 }
@@ -110,6 +80,22 @@ private struct ActivityRow: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .accessibilityHint("Opens activity overview")
         .accessibilityIdentifier("activity-row-\(activity.id.rawValue)")
+        .task(id: activity.sourceRevision) {
+            skiAreaNames = "Identifying ski areas…"
+            do {
+                let result = try await library.analysis(id: activity.id)
+                guard !Task.isCancelled else { return }
+                if let matching = result.timeline?.skiMatches, matching.failure != nil {
+                    skiAreaNames = "Ski areas unavailable"
+                } else {
+                    let names = result.timeline?.skiMatches?.resorts.map(\.displayName) ?? []
+                    skiAreaNames = names.isEmpty ? "Ski area not identified" : names.joined(separator: " · ")
+                }
+            } catch {
+                guard !Task.isCancelled else { return }
+                skiAreaNames = "Ski areas unavailable"
+            }
+        }
     }
 }
 
@@ -143,9 +129,8 @@ struct ActivityListView: View {
             } else if years.isEmpty {
                 ScrollableStatus {
                     ContentUnavailableView(
-                        "No past activities yet",
-                        systemImage: "map",
-                        description: Text("Record and save an activity on the map, or import a GPX recording from Profile.")
+                        "No activities",
+                        systemImage: "map"
                     )
                 }
             } else {

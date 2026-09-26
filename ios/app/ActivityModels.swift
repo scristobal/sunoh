@@ -109,7 +109,7 @@ struct RecordedTrack: Equatable, Sendable {
     var gpx: GPXTrack { GPXTrack(segments: segments.filter { !$0.points.isEmpty }.map { GPXSegment(points: $0.points) }) }
 }
 
-enum ContinuityBreak: Equatable, Sendable { case sourceBoundary, timeGap(milliseconds: Int64) }
+enum ContinuityBreak: Equatable, Sendable { case sourceBoundary }
 
 struct TrackSection: Equatable, Sendable {
     let sourceSegmentID: SegmentID
@@ -121,33 +121,6 @@ struct TrackGeometry: Equatable, Sendable {
     let activityID: ActivityID
     let sourceRevision: Int64
     let sections: [TrackSection]
-}
-
-/// The sole continuity rule for maps, statistics and thumbnails. Source segments
-/// are never modified. A gap of exactly 30 seconds remains connected.
-enum TrackContinuityPolicy {
-    static let maximumGapMilliseconds: Int64 = 30_000
-
-    static func geometry(for track: RecordedTrack) -> TrackGeometry {
-        var sections: [TrackSection] = []
-        for segment in track.segments {
-            var points: [TrackPoint] = []
-            var boundary: ContinuityBreak? = sections.isEmpty ? nil : .sourceBoundary
-            for point in segment.points {
-                if let previous = points.last {
-                    let gap = point.timestampMilliseconds - previous.timestampMilliseconds
-                    if gap > maximumGapMilliseconds {
-                        sections.append(TrackSection(sourceSegmentID: segment.id, breakBefore: boundary, points: points))
-                        points = []
-                        boundary = .timeGap(milliseconds: gap)
-                    }
-                }
-                points.append(point)
-            }
-            if !points.isEmpty { sections.append(TrackSection(sourceSegmentID: segment.id, breakBefore: boundary, points: points)) }
-        }
-        return TrackGeometry(activityID: track.activityID, sourceRevision: track.sourceRevision, sections: sections)
-    }
 }
 
 struct ActivityDetails: Sendable {
@@ -162,31 +135,27 @@ struct ActivityStatistics: Codable, Equatable, Sendable {
     var elevationLossMeters = 0.0
     var maximumElevationMeters: Double?
     var minimumElevationMeters: Double?
+    var runCount = 0
+    var liftCount = 0
+    var averageDownhillSpeedMetersPerSecond: Double?
+    var averageLiftSpeedMetersPerSecond: Double?
+    var runDistanceMeters = 0.0
+    var liftDistanceMeters = 0.0
+    var runDurationMilliseconds: Int64 = 0
+    var liftDurationMilliseconds: Int64 = 0
+    var maximumRunSpeedMetersPerSecond: Double?
+    var tallestRunHeightMeters: Double?
+    var longestRunDistanceMeters: Double?
+    var runElevationLossMeters = 0.0
+    var liftElevationGainMeters = 0.0
+    var tallestLiftHeightMeters: Double?
+    var longestLiftDistanceMeters: Double?
+    var averageRunSteepnessPercent: Double?
+    var averageLiftSteepnessPercent: Double?
+    var maximumRunSteepnessPercent: Double?
+    var maximumLiftSteepnessPercent: Double?
 
     init() {}
-    init(activity: ActivitySummary, geometry: TrackGeometry) {
-        elapsedDurationMilliseconds = max(0, (activity.lastPointAt ?? activity.startedAt).millisecondsSince1970 - activity.startedAt.millisecondsSince1970)
-        for section in geometry.sections {
-            for elevation in section.points.compactMap(\.elevationMeters) {
-                maximumElevationMeters = max(maximumElevationMeters ?? elevation, elevation)
-                minimumElevationMeters = min(minimumElevationMeters ?? elevation, elevation)
-            }
-            for (a, b) in zip(section.points, section.points.dropFirst()) {
-                let latitudeDelta = (b.latitude - a.latitude) * .pi / 180
-                let longitudeDelta = (b.longitude - a.longitude) * .pi / 180
-                let h = min(1, max(0, pow(sin(latitudeDelta / 2), 2)
-                    + cos(a.latitude * .pi / 180) * cos(b.latitude * .pi / 180) * pow(sin(longitudeDelta / 2), 2)))
-                distanceMeters += 6_371_000 * 2 * atan2(sqrt(h), sqrt(1 - h))
-                if let previous = a.elevationMeters, let current = b.elevationMeters {
-                    let delta = current - previous
-                    if delta.isFinite {
-                        elevationGainMeters += max(0, delta)
-                        elevationLossMeters += max(0, -delta)
-                    }
-                }
-            }
-        }
-    }
 }
 
 enum ActivityError: LocalizedError, Sendable {

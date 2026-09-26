@@ -71,11 +71,29 @@ import SwiftUI
             repository = try await ActivityRepository.open()
             #endif
             #if DEBUG && targetEnvironment(simulator)
+            if ProcessInfo.processInfo.arguments.contains("--clean") {
+                let removed = try await repository.cleanActivities()
+                print("SUNOH_CLEAN_OK removed=\(removed)")
+                exit(EXIT_SUCCESS)
+            }
             if ProcessInfo.processInfo.arguments.contains("--seed") {
-                let documents = try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: false)
-                try await repository.importSeed(from: documents.appendingPathComponent("seed.jsonl"))
+                let arguments = ProcessInfo.processInfo.arguments
+                guard let flag = arguments.firstIndex(of: "--seed"), arguments.indices.contains(flag + 1) else {
+                    throw GPXError.invalid("Provide a directory of GPX seed files.")
+                }
+                let directory = URL(fileURLWithPath: arguments[flag + 1], isDirectory: true)
+                let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+                    .filter { $0.pathExtension.lowercased() == "gpx" }.sorted { $0.lastPathComponent < $1.lastPathComponent }
+                guard !files.isEmpty else { throw GPXError.noTracks }
+                var imported = 0, skipped = 0
+                for file in files {
+                    let result = try await repository.importSeed(from: file)
+                    imported += result.imported.count; skipped += result.skipped
+                    print("SUNOH_SEED_FILE \(file.lastPathComponent) imported=\(result.imported.count) skipped=\(result.skipped)")
+                }
+                print("SUNOH_SEED_OK imported=\(imported) skipped=\(skipped)")
                 // This simulator-only launch acts as a command for `just seed`.
-                // Exit only after the repository has saved and verified the import.
+                // Exit only after every GPX import has been saved.
                 exit(EXIT_SUCCESS)
             }
             #endif
@@ -96,6 +114,10 @@ import SwiftUI
             await library.reloadHistory()
         } catch {
             #if DEBUG && targetEnvironment(simulator)
+            if ProcessInfo.processInfo.arguments.contains("--clean") {
+                print("SUNOH_CLEAN_ERROR \(error.localizedDescription)")
+                exit(EXIT_FAILURE)
+            }
             if ProcessInfo.processInfo.arguments.contains("--seed") {
                 print("SUNOH_SEED_ERROR \(error.localizedDescription)")
                 exit(EXIT_FAILURE)

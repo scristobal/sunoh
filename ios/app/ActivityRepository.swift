@@ -28,9 +28,12 @@ protocol ActivityPersistence: Actor {
 
 enum ActivityDatabase {
     static func container(at url: URL) throws -> ModelContainer {
-        let schema = Schema(versionedSchema: ActivitySchemaV1.self)
+        let original = try ActivityMigration.prepare(at: url)
+        let schema = Schema(versionedSchema: ActivitySchemaV9.self)
         let configuration = ModelConfiguration("Activities", schema: schema, url: url, cloudKitDatabase: .none)
-        return try ModelContainer(for: schema, configurations: [configuration])
+        let container = try ModelContainer(for: schema, migrationPlan: ActivityMigrationPlan.self, configurations: [configuration])
+        try ActivityMigration.verify(original, in: container, at: url)
+        return container
     }
 
     static func defaultURL() throws -> URL {
@@ -265,8 +268,8 @@ enum ActivityDatabase {
             throw ActivityError.staleAnalysis
         }
         do {
-            if let existing = value.analysis { existing.update(result) }
-            else { modelContext.insert(StoredActivityAnalysis(result, activity: value)) }
+            if let existing = value.analysis { try existing.update(result) }
+            else { modelContext.insert(try StoredActivityAnalysis(result, activity: value)) }
             try commit(modelContext)
         } catch { modelContext.rollback(); throw error }
     }
@@ -330,50 +333,29 @@ enum ActivityDatabase {
 }
 
 #if DEBUG && targetEnvironment(simulator)
-private struct SeedActivity: Decodable {
-    struct Metadata: Decodable { let id: String; let createdAt: Int64; let endedAt: Int64; let pointCount: Int }
-    struct Segment: Decodable {
-        struct Point: Decodable { let timestampMs: Int64; let latitude: Double; let longitude: Double; let elevation: Double? }
-        let path: [Point]
-    }
-    let session: Metadata
-    let segments: [Segment]
-}
-
 extension ActivityRepository {
-    /// Neutral developer fixture format remains compatible with existing private seeds.
-    func importSeed(from url: URL) throws {
-        guard try openActivity() == nil else { throw ActivityError.invalidTransition }
-        let bytes = try Data(contentsOf: url)
-        var activityCount = 0, pointCount = 0
-        for line in bytes.split(separator: 10) where !line.isEmpty {
-            let seed = try JSONDecoder().decode(SeedActivity.self, from: Data(line))
-            let id = ActivityID(rawValue: seed.session.id), rawID = seed.session.id
-            let segments = try seed.segments.map { segment in
-                GPXSegment(points: try segment.path.map { try TrackPoint(timestampMilliseconds: $0.timestampMs,
-                    latitude: $0.latitude, longitude: $0.longitude, elevationMeters: $0.elevation) })
-            }
-            let count = segments.reduce(0) { $0 + $1.points.count }
-            guard count == seed.session.pointCount else { throw ActivityError.invalidData("Seed count mismatch.") }
-            let track = GPXTrack(segments: segments)
-            if count > 0 { try track.validate() }
-            if try modelContext.fetchCount(FetchDescriptor<StoredActivity>(predicate: #Predicate { $0.id == rawID })) > 0 {
-                guard try recordedTrack(id: id).gpx == track else { throw ActivityError.invalidData("Seed conflicts with an existing activity.") }
-            } else {
-                try write {
-                    let activity = StoredActivity(id: id, startedAt: Timestamp(millisecondsSince1970: seed.session.createdAt), status: .completed, origin: .legacyUnknown)
-                    activity.pointCount = count; activity.lastPointAtMilliseconds = segments.last?.points.last?.timestampMilliseconds
-                    activity.sourceRevision = 1; modelContext.insert(activity)
-                    for (index, source) in segments.enumerated() {
-                        let segment = StoredTrackSegment(ordinal: index, boundary: .legacyUnknown, activity: activity)
-                        modelContext.insert(segment)
-                        segment.points = source.points.map { StoredTrackPoint(point: $0, activityID: id) }
-                    }
-                }
-            }
-            activityCount += 1; pointCount += count
+    func cleanActivities() throws -> Int {
+        if let writeFailure { throw ActivityError.storage(writeFailure) }
+        // A separate context can be discarded on failure without rolling back cascades.
+        let context = ModelContext(modelContainer)
+        context.autosaveEnabled = false
+        do {
+            let activities = try context.fetch(FetchDescriptor<StoredActivity>())
+            for activity in activities { context.delete(activity) }
+            if context.hasChanges { try commit(context) }
+            return activities.count
+        } catch {
+            throw ActivityError.storage(error.localizedDescription)
         }
-        print("SUNOH_SEED_OK activities=\(activityCount) points=\(pointCount)")
+    }
+
+    func importSeed(from url: URL) async throws -> GPXImportResult {
+        guard url.pathExtension.lowercased() == "gpx" else {
+            throw GPXError.invalid("Choose a GPX seed file.")
+        }
+        let tracks = try await GPXFiles.read(url)
+        guard try openActivity() == nil else { throw ActivityError.invalidTransition }
+        return try importTracks(tracks)
     }
 }
 #endif

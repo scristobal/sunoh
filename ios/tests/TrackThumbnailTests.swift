@@ -55,12 +55,12 @@ struct TrackThumbnailTests {
         #expect(item.activityViewController(controller, itemForActivityType: nil) as? URL == url)
     }
 
-    @Test func keepsSegmentAndTimeGapsDisconnectedAndFitsNorthUp() {
+    @Test func drawsLongSampleIntervalsKeepsSourceSegmentsSeparateAndFitsNorthUp() {
         let paths = TrackThumbnail.paths(geometry: fixtureGeometry([
             GPXSegment(points: [point(0, 47, 11), point(10_000, 47.01, 11.01), point(60_000, 47.02, 11.02)]),
             GPXSegment(points: [point(70_000, 47.03, 11.03)])
         ]), in: bounds)
-        #expect(paths.map(\.count) == [2, 1, 1])
+        #expect(paths.map(\.count) == [3, 1])
         #expect(paths[0][0].y > paths[0][1].y)
         for point in paths.flatMap({ $0 }) {
             #expect(point.x >= bounds.minX && point.x <= bounds.maxX)

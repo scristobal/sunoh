@@ -105,7 +105,7 @@ struct GPXExportAllButton: View {
     var body: some View {
         Button { preparing = true } label: {
             if preparing { HStack { ProgressView(); Text("Preparing export…") } }
-            else { Label("Export All", systemImage: "square.and.arrow.up") }
+            else { Label("Export all", systemImage: "square.and.arrow.up") }
         }
         .disabled(preparing || !library.canExportAllGPX)
         .accessibilityIdentifier("export-all-gpx")

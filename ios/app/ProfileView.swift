@@ -15,8 +15,6 @@ struct ProfileView: View {
                 GPXExportAllButton(library: library)
             } header: {
                 Text("Activities")
-            } footer: {
-                Text("Export All includes saved activities with recorded points in one GPX file. Your current recording is not included.")
             }
 
             if case .failed(let loadError) = library.history {

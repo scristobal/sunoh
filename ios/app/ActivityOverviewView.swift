@@ -11,6 +11,8 @@ struct ActivityOverviewView: View {
 
     @Namespace private var mapTransition
     @State private var content: LoadState<ActivityDetails> = .loading
+    @State private var analysis: ActivityAnalysis?
+    @State private var analysisFailed = false
     @State private var showFullScreenMap = false
     @State private var deletion: Deletion = .idle
 
@@ -33,11 +35,12 @@ struct ActivityOverviewView: View {
                 }
             case .loaded(let details):
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
+                    VStack(alignment: .leading) {
                         Button {
                             showFullScreenMap = true
                         } label: {
-                            InspectMapView(geometry: details.geometry)
+                            InspectMapView(geometry: details.geometry,
+                                           passages: analysis?.isCurrent(for: details.activity) == true ? analysis?.passages : nil)
                                 .allowsHitTesting(false)
                                 .accessibilityHidden(true)
                                 .aspectRatio(1, contentMode: .fit)
@@ -51,45 +54,57 @@ struct ActivityOverviewView: View {
                         .accessibilityLabel("Open full screen activity map")
                         .accessibilityIdentifier("open-activity-map")
 
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(details.activity.dateIntervalLabel)
-                                .font(.headline)
-                            Text("\(details.activity.pointCount) saved points")
-                                .foregroundStyle(.primary)
-                        }
-                        .fixedSize(horizontal: false, vertical: true)
-                        ActivityAnalysisView(activityID: activityID, library: library)
-                        Divider()
-                        Button(role: .destructive) { deletion = .confirming } label: {
-                            Label("Delete Activity", systemImage: "trash")
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
-                        .tint(.red)
-                        .accessibilityIdentifier("delete-activity")
+                        ActivityElevationProfile(geometry: details.geometry)
+                            .aspectRatio(4, contentMode: .fit)
+                        ActivityAnalysisView(activityID: activityID, library: library, onAnalysis: {
+                            analysis = $0
+                            analysisFailed = false
+                        }, onFailure: { _ in analysisFailed = true })
                     }
-                    .padding(20)
+                    .padding()
                 }
                 .accessibilityIdentifier("activity-overview-scroll")
-            }
-        }
-        .toolbar(.visible, for: .navigationBar)
-        .navigationTitle("Activity")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button(role: .close) { dismiss() }
-                    .accessibilityLabel("Close activity")
-                    .accessibilityHint("Returns to activities")
-                    .accessibilityIdentifier("close-activity-overview")
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                if case .loaded(let details) = content {
-                    GPXExportButton(activityID: activityID, library: library)
+                .safeAreaInset(edge: .bottom) {
+                    VStack {
+                        Divider()
+                        HStack {
+                            GPXExportButton(activityID: activityID, library: library)
+                                .disabled(details.activity.pointCount == 0)
+                            Button(role: .destructive) { deletion = .confirming } label: {
+                                Label("Delete Activity", systemImage: "trash")
+                            }
+                            .tint(.red)
+                            .accessibilityIdentifier("delete-activity")
+                        }
                         .labelStyle(.iconOnly)
-                        .disabled(details.activity.pointCount == 0)
+                        .buttonStyle(.bordered)
+                        .controlSize(.large)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding([.horizontal, .bottom])
+                    }
+                    .background(.background)
                 }
             }
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .safeAreaInset(edge: .top) {
+            VStack {
+                HStack {
+                    MapSheetCloseButton(label: "Close activity", hint: "Returns to activities",
+                                        identifier: "close-activity-overview") { dismiss() }
+                    if case .loaded(let details) = content {
+                        ActivityHeading(activity: details.activity, analysis: analysis, processingFailed: analysisFailed)
+                    } else {
+                        Text("Activity").font(.headline)
+                        Spacer()
+                    }
+                }
+                .padding()
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("activity-overview-header")
+                Divider()
+            }
+            .background(.background)
         }
         .disabled(deletion == .deleting)
         .interactiveDismissDisabled(deletion == .deleting)

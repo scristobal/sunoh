@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 
 private enum AppTab {
-    case map, activities, profile, debug
+    case map, activities, profile
 }
 
 struct MainView: View {
@@ -97,11 +97,6 @@ struct MainView: View {
                         .navigationTitle("Profile")
                         .navigationBarTitleDisplayMode(.inline)
                 }
-            }
-
-            Tab("Debug", systemImage: "ladybug", value: .debug) {
-                Color(uiColor: .systemBackground)
-                    .ignoresSafeArea()
             }
         }
         .tint(.black)

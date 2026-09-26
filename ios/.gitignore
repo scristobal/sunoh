@@ -2,10 +2,10 @@
 .build/
 .local/
 Configuration/Maps.local.xcconfig
+Configuration/SkiData.local.xcconfig
 Configuration/.maps-*
 **/xcuserdata/
 *.xcuserstate
 *.store*
 *.sqlite*
-seed.jsonl
 app/Resources/*.pmtiles

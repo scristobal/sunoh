@@ -1,0 +1,4 @@
+#include "Maps.xcconfig"
+
+SUNOH_SKI_DATA_DIRECTORY = $(HOME)/Library/Application Support/Sunoh/SkiData
+#include? "SkiData.local.xcconfig"

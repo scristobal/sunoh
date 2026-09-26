@@ -60,7 +60,7 @@
 		282BF9632F4EE24300AA5058 /* DebugRoute.gpx */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = DebugRoute.gpx; sourceTree = "<group>"; };
 		2889364B2F0E3CAE008C54C9 /* Sunoh.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Sunoh.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C01000000000000000000001 /* SunohTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = SunohTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		C02000000000000000000001 /* Configuration/Maps.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Configuration/Maps.xcconfig; sourceTree = "<group>"; };
+		C02000000000000000000001 /* Configuration/App.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Configuration/App.xcconfig; sourceTree = "<group>"; };
 		C03000000000000000000001 /* SunohUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = SunohUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -162,7 +162,7 @@
 		288936422F0E3CAE008C54C9 = {
 			isa = PBXGroup;
 			children = (
-				C02000000000000000000001 /* Configuration/Maps.xcconfig */,
+				C02000000000000000000001 /* Configuration/App.xcconfig */,
 				282BF9632F4EE24300AA5058 /* DebugRoute.gpx */,
 				282529DB2F4EE546001088C7 /* DebugRoute.gpx */,
 				2889364D2F0E3CAE008C54C9 /* app */,
@@ -219,6 +219,7 @@
 				288936472F0E3CAE008C54C9 /* Sources */,
 				288936482F0E3CAE008C54C9 /* Frameworks */,
 				288936492F0E3CAE008C54C9 /* Resources */,
+				C04000000000000000000001 /* Bundle Ski Data */,
 				280FDD1B2F54A68400512F42 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
@@ -362,6 +363,30 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		C04000000000000000000001 /* Bundle Ski Data */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			inputPaths = (
+				"$(SRCROOT)/scripts/bundle_ski_data.sh",
+				"$(SUNOH_SKI_DATA_DIRECTORY)/lifts.gpkg",
+				"$(SUNOH_SKI_DATA_DIRECTORY)/ski_areas.gpkg",
+				"$(SUNOH_SKI_DATA_DIRECTORY)/spots.gpkg",
+			);
+			name = "Bundle Ski Data";
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/SkiData",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/SkiData/lifts.gpkg",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/SkiData/ski_areas.gpkg",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/SkiData/spots.gpkg",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "/bin/sh \"$SRCROOT/scripts/bundle_ski_data.sh\"";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		280FDD072F54A68300512F42 /* Sources */ = {
@@ -611,7 +636,7 @@
 		};
 		288936572F0E3CAF008C54C9 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = C02000000000000000000001 /* Configuration/Maps.xcconfig */;
+			baseConfigurationReference = C02000000000000000000001 /* Configuration/App.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -656,7 +681,7 @@
 		};
 		288936582F0E3CAF008C54C9 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = C02000000000000000000001 /* Configuration/Maps.xcconfig */;
+			baseConfigurationReference = C02000000000000000000001 /* Configuration/App.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;

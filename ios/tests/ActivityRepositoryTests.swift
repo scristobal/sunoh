@@ -39,6 +39,82 @@ private final class FailingCommit: Sendable {
 private final class GPXFixtureBundle: NSObject {}
 
 struct ActivityRepositoryTests {
+    #if DEBUG && targetEnvironment(simulator)
+    @Test func cleanRemovesAllActivityStatesAndTheirOwnedData() async throws {
+        let fixture = try await Fixture.create()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let track = GPXTrack(segments: [GPXSegment(points: [point(10_001), point(20_001)])])
+        let imported = try await fixture.repository.importTracks([track])
+        let saved = try #require(imported.imported.first)
+        _ = try await ActivityProcessor(repository: fixture.repository).process(id: saved.id)
+        let active = try await fixture.repository.start()
+        _ = try await fixture.repository.append([point(1_001)], activityID: active.id)
+        #expect(try await fixture.repository.cleanActivities() == 2)
+        let reopened = try await ActivityRepository.open(url: fixture.directory.appendingPathComponent("test.store"))
+        #expect(try await reopened.summaries().isEmpty)
+        #expect(try await reopened.active() == nil)
+        let container = try ActivityDatabase.container(at: fixture.directory.appendingPathComponent("test.store"))
+        let context = ModelContext(container)
+        #expect(try context.fetchCount(FetchDescriptor<StoredTrackPoint>()) == 0)
+        #expect(try context.fetchCount(FetchDescriptor<StoredTrackSegment>()) == 0)
+        #expect(try context.fetchCount(FetchDescriptor<StoredActivityAnalysis>()) == 0)
+        #expect(try await reopened.cleanActivities() == 0)
+        let next = try await reopened.start()
+        _ = try await reopened.pause(id: next.id)
+        #expect(try await reopened.cleanActivities() == 1)
+        #expect(try await reopened.active() == nil)
+    }
+
+    @Test func failedCleanPreservesSavedObservations() async throws {
+        let fixture = try await Fixture.create()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let track = GPXTrack(segments: [GPXSegment(points: [point(10_001)])])
+        let result = try await fixture.repository.importTracks([track])
+        let saved = try #require(result.imported.first)
+        let failure = FailingCommit()
+        let repository = try await ActivityRepository.open(url: fixture.directory.appendingPathComponent("test.store"), commit: failure.save)
+        failure.fail()
+        await #expect(throws: ActivityError.self) { try await repository.cleanActivities() }
+        let reopened = try await ActivityRepository.open(url: fixture.directory.appendingPathComponent("test.store"))
+        #expect(try await reopened.recordedTrack(id: saved.id).gpx == track)
+    }
+
+    @Test func gpxSeedPersistsObservationsAndSkipsDuplicatesAfterReopening() async throws {
+        let fixture = try await Fixture.create()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let track = GPXTrack(segments: [GPXSegment(points: [point(10_001), point(20_002, elevationMeters: nil)]),
+                                        GPXSegment(points: [point(90_003)])])
+        let file = fixture.directory.appendingPathComponent("seed.gpx")
+        try GPX.encode(track).write(to: file)
+        let result = try await fixture.repository.importSeed(from: file)
+        let activity = try #require(result.imported.first)
+        #expect(result.imported.count == 1)
+        #expect(result.skipped == 0)
+        let reopened = try await ActivityRepository.open(url: fixture.directory.appendingPathComponent("test.store"))
+        #expect(try await reopened.recordedTrack(id: activity.id).gpx == track)
+        let repeated = try await reopened.importSeed(from: file)
+        #expect(repeated.imported.isEmpty)
+        #expect(repeated.skipped == 1)
+    }
+
+    @Test func gpxSeedRejectsInvalidInputAndPreservesAnOpenRecording() async throws {
+        let fixture = try await Fixture.create()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let file = fixture.directory.appendingPathComponent("seed.gpx")
+        try Data("not GPX".utf8).write(to: file)
+        await #expect(throws: GPXError.self) { try await fixture.repository.importSeed(from: file) }
+        let legacy = fixture.directory.appendingPathComponent("seed.jsonl")
+        await #expect(throws: GPXError.self) { try await fixture.repository.importSeed(from: legacy) }
+        #expect(try await fixture.repository.summaries().isEmpty)
+        let active = try await fixture.repository.start()
+        let track = GPXTrack(segments: [GPXSegment(points: [point(10_001)])])
+        try GPX.encode(track).write(to: file)
+        await #expect(throws: ActivityError.self) { try await fixture.repository.importSeed(from: file) }
+        #expect(try await fixture.repository.active()?.id == active.id)
+        #expect(try await fixture.repository.summaries().isEmpty)
+    }
+    #endif
+
     @Test @MainActor func exportsAllSavedTracksWithoutEmptyActivitiesOrChangingTheActiveRecording() async throws {
         let fixture = try await Fixture.create()
         let store = RecordingController(repository: fixture.repository)
@@ -140,7 +216,7 @@ struct ActivityRepositoryTests {
         #expect(try await reopened.importTracks(tracks).imported.count == 2)
     }
 
-    @Test func gpxRoundTripPreservesStoredSamplesWithoutDisplayGapSplitting() async throws {
+    @Test func gpxRoundTripPreservesStoredSamplesAndSourceBoundaries() async throws {
         let f = try await Fixture.create()
         let id = try await f.repository.start().id
         _ = try await f.repository.append([point(1_001), point(61_001, longitude: 11.001, elevationMeters: nil)], activityID: id)
@@ -152,7 +228,7 @@ struct ActivityRepositoryTests {
         _ = try await f.repository.finish(id: id)
         let original = try await f.repository.recordedTrack(id: id).gpx
         #expect(original.segments.count == 2)
-        #expect(try await f.repository.geometry(id: id).sections.count == 3)
+        #expect(try await f.repository.geometry(id: id).sections.count == 2)
 
         let destination = try await Fixture.create()
         let decoded = try GPX.decode(GPX.encode(original))
@@ -308,7 +384,7 @@ struct ActivityRepositoryTests {
         #expect(try await f.repository.active()?.summary.pointCount == 0)
     }
 
-    @Test func statisticsRespectGapsAndMissingElevation() {
+    @Test func statisticsRespectSourceBoundariesAndMissingElevation() {
         let summary = ActivitySummary(id: "stats", startedAt: 1_000, lastPointAt: 61_000, pointCount: 4)
         let p: (Double, Double?) -> TrackPoint = { lon, elevationMeters in
             try! TrackPoint(timestampMilliseconds: 1_001, latitude: 0, longitude: lon, elevationMeters: elevationMeters)

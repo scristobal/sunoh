@@ -4,7 +4,7 @@ import Testing
 @testable import Sunoh
 
 struct ActivityModelTests {
-    @Test func continuityDistinguishesSourceBoundariesFromInferredGaps() throws {
+    @Test func continuityPreservesSourceBoundariesWithoutSplittingLongSampleIntervals() throws {
         let points = try [0, 30_000, 60_001].map {
             try TrackPoint(timestampMilliseconds: Int64($0), latitude: 47, longitude: 11 + Double($0) / 1_000_000, elevationMeters: nil)
         }
@@ -12,10 +12,10 @@ struct ActivityModelTests {
             latitude: 48, longitude: 12, elevationMeters: 900)])])
         let geometry = TrackContinuityPolicy.geometry(for: source)
         #expect(source.segments.count == 2)
-        #expect(geometry.sections.map { $0.points.count } == [2, 1, 1])
-        #expect(geometry.sections.map(\.breakBefore) == [nil, .timeGap(milliseconds: 30_001), .sourceBoundary])
-        #expect(geometry.sections[0].sourceSegmentID == geometry.sections[1].sourceSegmentID)
-        #expect(geometry.sections[1].sourceSegmentID != geometry.sections[2].sourceSegmentID)
+        #expect(geometry.sections.map { $0.points.count } == [3, 1])
+        #expect(geometry.sections.map(\.breakBefore) == [nil, .sourceBoundary])
+        #expect(geometry.sections[0].sourceSegmentID != geometry.sections[1].sourceSegmentID)
+        #expect(geometry.sections.map(\.points) == source.segments.map(\.points))
         #expect(try GPX.decode(GPX.encode(source.gpx)) == [source.gpx])
     }
 
