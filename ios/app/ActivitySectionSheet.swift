@@ -57,7 +57,7 @@ struct ActivitySectionSheet<Header: View, Details: View>: View {
     private var measuredDetails: some View {
         details()
             .frame(maxWidth: .infinity, alignment: .topLeading)
-            .padding([.horizontal, .bottom])
+            .padding(.horizontal)
             .fixedSize(horizontal: false, vertical: true)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
                 guard height > 0, height != detailsHeight else { return }
