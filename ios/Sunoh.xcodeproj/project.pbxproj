@@ -10,7 +10,7 @@
 		280FDD0D2F54A68300512F42 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 280FDD0C2F54A68300512F42 /* WidgetKit.framework */; };
 		280FDD0F2F54A68300512F42 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 280FDD0E2F54A68300512F42 /* SwiftUI.framework */; };
 		280FDD1A2F54A68400512F42 /* live-activity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 280FDD0B2F54A68300512F42 /* live-activity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		28255AD72F4EE9A4001088C7 /* MapLibre in Frameworks */ = {isa = PBXBuildFile; productRef = 28255AD62F4EE9A4001088C7 /* MapLibre */; };
+		28255AD72F4EE9A4001088C7 /* MapboxMaps in Frameworks */ = {isa = PBXBuildFile; productRef = 28255AD62F4EE9A4001088C7 /* MapboxMaps */; };
 		282BFD702F4EE24300AA5058 /* DebugRoute.gpx in Resources */ = {isa = PBXBuildFile; fileRef = 282BF9632F4EE24300AA5058 /* DebugRoute.gpx */; };
 /* End PBXBuildFile section */
 
@@ -129,7 +129,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				28255AD72F4EE9A4001088C7 /* MapLibre in Frameworks */,
+				28255AD72F4EE9A4001088C7 /* MapboxMaps in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -233,7 +233,7 @@
 			);
 			name = Sunoh;
 			packageProductDependencies = (
-				28255AD62F4EE9A4001088C7 /* MapLibre */,
+				28255AD62F4EE9A4001088C7 /* MapboxMaps */,
 			);
 			productName = Sunoh;
 			productReference = 2889364B2F0E3CAE008C54C9 /* Sunoh.app */;
@@ -317,7 +317,7 @@
 			mainGroup = 288936422F0E3CAE008C54C9;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				282552AB2F4EE88C001088C7 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */,
+				282552AB2F4EE88C001088C7 /* XCRemoteSwiftPackageReference "mapbox-maps-ios-binary" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 2889364C2F0E3CAE008C54C9 /* Products */;
@@ -368,7 +368,8 @@
 		C04000000000000000000001 /* Bundle Ski Data */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
-			files = ();
+			files = (
+			);
 			inputPaths = (
 				"$(SRCROOT)/scripts/bundle_ski_data.sh",
 				"$(SUNOH_SKI_DATA_DIRECTORY)/lifts.gpkg",
@@ -865,21 +866,21 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		282552AB2F4EE88C001088C7 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */ = {
+		282552AB2F4EE88C001088C7 /* XCRemoteSwiftPackageReference "mapbox-maps-ios-binary" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/maplibre/maplibre-gl-native-distribution";
+			repositoryURL = "git@github.com:mapbox/mapbox-maps-ios-binary.git";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 6.23.0;
+				minimumVersion = 11.31.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		28255AD62F4EE9A4001088C7 /* MapLibre */ = {
+		28255AD62F4EE9A4001088C7 /* MapboxMaps */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 282552AB2F4EE88C001088C7 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */;
-			productName = MapLibre;
+			package = 282552AB2F4EE88C001088C7 /* XCRemoteSwiftPackageReference "mapbox-maps-ios-binary" */;
+			productName = MapboxMaps;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

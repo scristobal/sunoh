@@ -1,5 +1,6 @@
+import Combine
 import CoreLocation
-import MapLibre
+import MapboxMaps
 import Testing
 @testable import Sunoh
 
@@ -12,21 +13,21 @@ import Testing
         let restored = CLLocationCoordinate2D(latitude: 48, longitude: 12)
 
         store.updateUserLocation(hasPermission: false, coordinate: first)
-        #expect(!map.showsUserLocation)
+        #expect(map.location.options.puckType == nil)
         store.updateUserLocation(hasPermission: true, coordinate: nil)
-        #expect(abs(map.centerCoordinate.latitude - first.latitude) > 1)
+        #expect(abs(map.mapboxMap.cameraState.center.latitude - first.latitude) > 1)
         store.updateUserLocation(hasPermission: true, coordinate: first)
         expectCenter(map, first)
-        #expect(map.userTrackingMode == .follow)
+        #expect(isFollowingUser(map))
 
         store.updateUserLocation(hasPermission: false, coordinate: first)
-        #expect(!map.showsUserLocation)
+        #expect(map.location.options.puckType == nil)
         store.updateUserLocation(hasPermission: true, coordinate: nil)
         expectCenter(map, first)
         store.updateUserLocation(hasPermission: true, coordinate: restored)
         expectCenter(map, restored)
-        #expect(map.userTrackingMode == .follow)
-        #expect(abs(map.zoomLevel - 14) < 0.001)
+        #expect(isFollowingUser(map))
+        #expect(abs(map.mapboxMap.cameraState.zoom - 14) < 0.001)
     }
 
     @Test func laterFixesRespectManualPanning() {
@@ -36,13 +37,13 @@ import Testing
         store.updateUserLocation(hasPermission: true,
                                  coordinate: CLLocationCoordinate2D(latitude: 47, longitude: 11))
         let manuallyChosen = CLLocationCoordinate2D(latitude: 48, longitude: 12)
-        map.setUserTrackingMode(.none, animated: false, completionHandler: nil)
-        map.setCenter(manuallyChosen, animated: false)
+        map.viewport.idle()
+        map.mapboxMap.setCamera(to: CameraOptions(center: manuallyChosen))
 
         store.updateUserLocation(hasPermission: true,
                                  coordinate: CLLocationCoordinate2D(latitude: 47.1, longitude: 11.1))
         expectCenter(map, manuallyChosen)
-        #expect(map.userTrackingMode == .none)
+        #expect(map.viewport.status == .idle)
     }
 
     @Test func aFixBeforeMapCreationStillCentersTheAttachedMap() {
@@ -53,32 +54,30 @@ import Testing
         store.mapView = map
         store.updateUserLocation(hasPermission: true, coordinate: coordinate)
         expectCenter(map, coordinate)
-        #expect(map.userTrackingMode == .follow)
+        #expect(isFollowingUser(map))
     }
 
-    private func makeMap() -> MLNMapView {
-        let map = MLNMapView(frame: .zero, styleJSON: #"{"version":8,"sources":{},"layers":[]}"#)
-        map.locationManager = SilentMapLocationManager()
-        map.zoomLevel = 14
-        return map
+    private func makeMap() -> ActivityMapView {
+        let location = LocationDataModel(location: Empty<[Location], Never>().eraseToAnyPublisher())
+        let options = MapInitOptions(cameraOptions: CameraOptions(center: CLLocationCoordinate2D(latitude: 0, longitude: 0), zoom: 14),
+                                     styleURI: nil, styleJSON: #"{"version":8,"sources":{},"layers":[]}"#,
+                                     locationDataModel: location)
+        return ActivityMapView(frame: CGRect(x: 0, y: 0, width: 390, height: 844), mapInitOptions: options)
     }
 
-    private func expectCenter(_ map: MLNMapView, _ expected: CLLocationCoordinate2D) {
-        #expect(abs(map.centerCoordinate.latitude - expected.latitude) < 0.00001)
-        #expect(abs(map.centerCoordinate.longitude - expected.longitude) < 0.00001)
+    private func isFollowingUser(_ map: ActivityMapView) -> Bool {
+        switch map.viewport.status {
+        case .state(let state), .transition(_, toState: let state):
+            return state is FollowPuckViewportState
+        case .idle:
+            return false
+        @unknown default:
+            return false
+        }
     }
-}
 
-/// Keeps real MapLibre camera behavior while avoiding GPS and permission prompts.
-private final class SilentMapLocationManager: NSObject, MLNLocationManager {
-    weak var delegate: (any MLNLocationManagerDelegate)?
-    var authorizationStatus: CLAuthorizationStatus { .authorizedWhenInUse }
-    var headingOrientation: CLDeviceOrientation = .portrait
-    func requestAlwaysAuthorization() {}
-    func requestWhenInUseAuthorization() {}
-    func startUpdatingLocation() {}
-    func stopUpdatingLocation() {}
-    func startUpdatingHeading() {}
-    func stopUpdatingHeading() {}
-    func dismissHeadingCalibrationDisplay() {}
+    private func expectCenter(_ map: ActivityMapView, _ expected: CLLocationCoordinate2D) {
+        #expect(abs(map.mapboxMap.cameraState.center.latitude - expected.latitude) < 0.00001)
+        #expect(abs(map.mapboxMap.cameraState.center.longitude - expected.longitude) < 0.00001)
+    }
 }

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ProfileView: View {
     let library: ActivityLibrary
+    @AppStorage(MapStyle.preferenceKey) private var mapStyle = MapStyle.defaultSelection
 
     var body: some View {
         Form {
@@ -15,6 +16,16 @@ struct ProfileView: View {
                 GPXExportAllButton(library: library)
             } header: {
                 Text("Activities")
+            }
+
+            Section("Map") {
+                Picker("Style", selection: $mapStyle) {
+                    ForEach(MapStyle.options(including: mapStyle)) { style in
+                        Text(style.name).tag(style)
+                    }
+                }
+                .pickerStyle(.navigationLink)
+                .accessibilityIdentifier("map-style-picker")
             }
 
             if case .failed(let loadError) = library.history {

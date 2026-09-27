@@ -22,10 +22,8 @@
 	</array>
 	<key>SunohMapStyleURL</key>
 	<string>$(SUNOH_MAP_STYLE_URL)</string>
-	<key>SunohMapAccessClientID</key>
-	<string>$(SUNOH_MAP_ACCESS_CLIENT_ID)</string>
-	<key>SunohMapAccessClientSecret</key>
-	<string>$(SUNOH_MAP_ACCESS_CLIENT_SECRET)</string>
+	<key>MBXAccessToken</key>
+	<string>$(SUNOH_MAPBOX_ACCESS_TOKEN)</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Sunō keeps your location active to show your position and record your route, including in the background. Pausing stops saving points while location stays active.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>

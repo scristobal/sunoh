@@ -1,6 +1,7 @@
 import CoreLocation
-import MapLibre
+import MapboxMaps
 import Testing
+import UIKit
 @testable import Sunoh
 
 @MainActor @Suite(.serialized) struct ActivityMapFitTests {
@@ -18,28 +19,117 @@ import Testing
         }
     }
 
+    @Test func pitchedMapsKeepTheTrackAboveBothSheetHeights() throws {
+        let view = mapView()
+        view.mapboxMap.setCamera(to: CameraOptions(bearing: 25, pitch: 45))
+        let store = MapViewStore()
+        store.mapView = view
+        let geometry = try track(latitude: 47, longitude: 11)
+        for sheetHeight in [CGFloat(120), 430] {
+            let padding = ActivityMapViewport.padding(safeTop: 59, safeBottom: 34, obscuredBottom: sheetHeight)
+            #expect(store.fitTrack(geometry, padding: padding))
+            #expect(abs(view.mapboxMap.cameraState.pitch - 45) < 0.001)
+            #expect(abs(view.mapboxMap.cameraState.bearing - 25) < 0.001)
+            expectInsideVisibleMap(geometry, in: view, padding: padding)
+        }
+    }
+
     @Test func selectionChangesBeforeAndAfterStyleLoadingReplaceAndRefitTheGeometry() async throws {
         let view = mapView()
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive })
+        let previousKeyWindow = scene.keyWindow
+        let window = UIWindow(windowScene: scene)
+        window.frame = view.bounds
+        let controller = UIViewController()
+        window.rootViewController = controller
+        controller.view.addSubview(view)
+        window.makeKeyAndVisible()
+        defer {
+            window.isHidden = true
+            previousKeyWindow?.makeKey()
+        }
+        window.layoutIfNeeded()
+        view.layoutIfNeeded()
         let store = MapViewStore()
         store.mapView = view
         let first = try track(latitude: 47, longitude: 11)
         let second = try track(latitude: 48, longitude: 12)
         let coordinator = StaticMapViewRepresentable.Coordinator(map: store, geometry: first, passages: .init(), obscuredBottom: 120, safeTop: 59)
         coordinator.update(geometry: second, passages: .init(), obscuredBottom: 430, safeTop: 59)
-        let style = try await waitForStyle(in: view)
-        coordinator.mapView(view, didFinishLoading: style)
+        try await waitForStyle(in: view)
+        coordinator.styleDidLoad(in: view)
         coordinator.fitTrackIfNeeded(in: view)
         expectInsideVisibleMap(second, in: view, padding: ActivityMapViewport.padding(safeTop: 59, safeBottom: 0, obscuredBottom: 430))
-        #expect(abs(view.centerCoordinate.latitude - 48) < 0.02)
-        // Keep the Objective-C source wrapper alive to inspect the next shape assignment.
-        let source = try #require(style.source(withIdentifier: "user-track") as? MLNShapeSource)
+        #expect(abs(view.mapboxMap.cameraState.center.latitude - 48) < 0.02)
         coordinator.update(geometry: first, passages: .init(), obscuredBottom: 120, safeTop: 59)
         coordinator.fitTrackIfNeeded(in: view)
         expectInsideVisibleMap(first, in: view, padding: ActivityMapViewport.padding(safeTop: 59, safeBottom: 0, obscuredBottom: 120))
-        #expect(abs(view.centerCoordinate.latitude - 47) < 0.02)
-        let shape = try #require(source.shape as? MLNShapeCollectionFeature)
-        let line = try #require(shape.shapes.first as? MLNPolylineFeature)
-        #expect(abs(line.coordinate.latitude - 47) < 0.02)
+        #expect(abs(view.mapboxMap.cameraState.center.latitude - 47) < 0.02)
+        let coordinates = try await waitForTrackCoordinates(in: view, nearLatitude: 47)
+        #expect(!coordinates.isEmpty)
+        #expect(coordinates.allSatisfy { abs($0.latitude - 47) < 0.02 })
+    }
+
+    @Test func styleReloadRestoresTheTrackWithoutResettingTheChosenCamera() async throws {
+        let view = mapView()
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive })
+        let previousKeyWindow = scene.keyWindow
+        let window = UIWindow(windowScene: scene)
+        window.frame = view.bounds
+        let controller = UIViewController()
+        window.rootViewController = controller
+        controller.view.addSubview(view)
+        window.makeKeyAndVisible()
+        defer {
+            window.isHidden = true
+            previousKeyWindow?.makeKey()
+        }
+        window.layoutIfNeeded()
+        view.layoutIfNeeded()
+
+        let store = MapViewStore()
+        store.mapView = view
+        let geometry = try track(latitude: 47, longitude: 11)
+        let coordinator = StaticMapViewRepresentable.Coordinator(map: store, geometry: geometry, passages: nil,
+                                                                obscuredBottom: 120, safeTop: 59)
+        try await waitForStyle(in: view)
+        coordinator.observeStyle(in: view)
+        coordinator.fitTrackIfNeeded(in: view)
+        let fitted = view.mapboxMap.cameraState
+        view.mapboxMap.setCamera(to: CameraOptions(
+            center: CLLocationCoordinate2D(latitude: fitted.center.latitude + 0.001, longitude: fitted.center.longitude + 0.001),
+            zoom: fitted.zoom - 0.5, bearing: 30, pitch: 0
+        ))
+        let chosen = view.mapboxMap.cameraState
+
+        coordinator.prepareForStyleChange()
+        var replacementStyleLoaded = false
+        let observation = view.mapboxMap.onStyleLoaded.observeNext { _ in replacementStyleLoaded = true }
+        defer { observation.cancel() }
+        view.mapboxMap.loadStyle(#"{"version":8,"pitch":70,"sources":{},"layers":[{"id":"test-background","type":"background","paint":{"background-color":"white"}}]}"#)
+        for _ in 0..<100 {
+            if replacementStyleLoaded { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        try #require(replacementStyleLoaded)
+        coordinator.fitTrackIfNeeded(in: view)
+
+        let reloaded = view.mapboxMap.cameraState
+        #expect(abs(reloaded.center.latitude - chosen.center.latitude) < 0.00001)
+        #expect(abs(reloaded.center.longitude - chosen.center.longitude) < 0.00001)
+        #expect(abs(reloaded.zoom - chosen.zoom) < 0.001)
+        #expect(abs(reloaded.bearing - chosen.bearing) < 0.001)
+        #expect(abs(reloaded.pitch - chosen.pitch) < 0.001)
+        #expect(reloaded.padding == chosen.padding)
+        #expect(view.mapboxMap.sourceExists(withId: "user-track"))
+        for layer in ["test-background", "user-track-casing", "user-track-run", "user-track-lift", "user-track-pending", "user-track-live"] {
+            #expect(view.mapboxMap.layerExists(withId: layer))
+        }
+        let coordinates = try await waitForTrackCoordinates(in: view, nearLatitude: 47)
+        #expect(!coordinates.isEmpty)
+        #expect(coordinates.allSatisfy { abs($0.latitude - 47) < 0.02 })
     }
 
     @Test func fitsDateLineAndStationarySectionsInTheUnobscuredViewport() throws {
@@ -53,7 +143,7 @@ import Testing
         ])])
         #expect(store.fitTrack(dateLine, padding: padding))
         expectInsideVisibleMap(dateLine, in: view, padding: padding)
-        #expect(view.zoomLevel > 10)
+        #expect(view.mapboxMap.cameraState.zoom > 10)
         let stationary = try fixtureGeometry([GPXSegment(points: [
             TrackPoint(timestampMilliseconds: 0, latitude: 47, longitude: 11, elevationMeters: nil),
             TrackPoint(timestampMilliseconds: 10_000, latitude: 47, longitude: 11, elevationMeters: nil)
@@ -74,7 +164,7 @@ import Testing
             #expect(padding.left == 40)
             #expect(padding.bottom == height + 40)
             #expect(store.fitTrack(geometry, padding: padding))
-            #expect(abs(view.zoomLevel - 16) < 0.001)
+            #expect(abs(view.mapboxMap.cameraState.zoom - 16) < 0.001)
             expectInsideVisibleMap(geometry, in: view, padding: padding)
             expectCentered(geometry, in: view, padding: padding)
         }
@@ -107,8 +197,8 @@ import Testing
         let coordinator = StaticMapViewRepresentable.Coordinator(map: store, geometry: first, passages: nil,
                                                                 obscuredBottom: 120, safeTop: 59,
                                                                 contextPadding: 40, fliesToChanges: true)
-        let style = try await waitForStyle(in: view)
-        coordinator.mapView(view, didFinishLoading: style)
+        try await waitForStyle(in: view)
+        coordinator.styleDidLoad(in: view)
         coordinator.fitTrackIfNeeded(in: view)
         #expect(view.flightCount == 0)
         expectInsideVisibleMap(first, in: view, padding: ActivityMapViewport.padding(safeTop: max(59, view.safeAreaInsets.top),
@@ -141,15 +231,16 @@ import Testing
         #expect(view.completedFlights.contains(2))
         let padding = ActivityMapViewport.padding(safeTop: max(59, view.safeAreaInsets.top), safeBottom: view.safeAreaInsets.bottom,
                                                  obscuredBottom: 430, contextPadding: 40)
-        #expect(abs(view.zoomLevel - 16) < 0.001)
+        #expect(abs(view.mapboxMap.cameraState.zoom - 16) < 0.001)
         expectInsideVisibleMap(latest, in: view, padding: padding)
         expectCentered(latest, in: view, padding: padding)
         coordinator.cancelPendingFit()
     }
 
     private func mapView() -> FlightObservingMapView {
-        let view = FlightObservingMapView(frame: CGRect(x: 0, y: 0, width: 390, height: 844), styleJSON: #"{"version":8,"sources":{},"layers":[]}"#)
-        view.automaticallyAdjustsContentInset = false
+        let options = MapInitOptions(cameraOptions: CameraOptions(pitch: 0), styleURI: nil,
+                                     styleJSON: #"{"version":8,"sources":{},"layers":[]}"#)
+        let view = FlightObservingMapView(frame: CGRect(x: 0, y: 0, width: 390, height: 844), mapInitOptions: options)
         view.maximumZoomLevel = 20
         view.layoutIfNeeded()
         return view
@@ -162,17 +253,17 @@ import Testing
         ])])
     }
 
-    private func expectInsideVisibleMap(_ geometry: TrackGeometry, in view: MLNMapView, padding: UIEdgeInsets) {
+    private func expectInsideVisibleMap(_ geometry: TrackGeometry, in view: ActivityMapView, padding: UIEdgeInsets) {
         let visible = view.bounds.inset(by: padding).insetBy(dx: -1, dy: -1)
         for point in geometry.sections.flatMap(\.points) {
-            let projected = view.convert(CLLocationCoordinate2D(latitude: point.latitude, longitude: point.longitude), toPointTo: view)
+            let projected = view.mapboxMap.point(for: CLLocationCoordinate2D(latitude: point.latitude, longitude: point.longitude))
             #expect(visible.contains(projected))
         }
     }
 
-    private func expectCentered(_ geometry: TrackGeometry, in view: MLNMapView, padding: UIEdgeInsets) {
+    private func expectCentered(_ geometry: TrackGeometry, in view: ActivityMapView, padding: UIEdgeInsets) {
         let projected = geometry.sections.flatMap(\.points).map {
-            view.convert(CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude), toPointTo: view)
+            view.mapboxMap.point(for: CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude))
         }
         let visible = view.bounds.inset(by: padding)
         let center = CGPoint(x: projected.reduce(0) { $0 + $1.x } / CGFloat(projected.count),
@@ -181,26 +272,44 @@ import Testing
         #expect(abs(center.y - visible.midY) < 1)
     }
 
-    private func waitForStyle(in view: MLNMapView) async throws -> MLNStyle {
+    private func waitForTrackCoordinates(in view: ActivityMapView, nearLatitude latitude: Double) async throws -> [CLLocationCoordinate2D] {
+        var coordinates: [CLLocationCoordinate2D] = []
         for _ in 0..<100 {
-            if let style = view.style { return style }
+            let features: [Feature] = try await withCheckedThrowingContinuation { continuation in
+                view.mapboxMap.querySourceFeatures(for: "user-track", options: SourceQueryOptions(sourceLayerIds: nil, filter: true)) { result in
+                    continuation.resume(with: result.map { $0.map { $0.queriedFeature.feature } })
+                }
+            }
+            coordinates = features.flatMap { feature -> [CLLocationCoordinate2D] in
+                guard case .lineString(let line) = feature.geometry else { return [] }
+                return line.coordinates
+            }
+            if !coordinates.isEmpty, coordinates.allSatisfy({ abs($0.latitude - latitude) < 0.02 }) { return coordinates }
             try await Task.sleep(for: .milliseconds(20))
         }
-        return try #require(view.style)
+        return coordinates
+    }
+
+    private func waitForStyle(in view: ActivityMapView) async throws {
+        for _ in 0..<100 {
+            if view.mapboxMap.isStyleLoaded { return }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        try #require(view.mapboxMap.isStyleLoaded)
     }
 }
 
-@MainActor private final class FlightObservingMapView: MLNMapView {
+@MainActor private final class FlightObservingMapView: ActivityMapView {
     private(set) var flightCount = 0
     private(set) var completedFlights: Set<Int> = []
 
-    override func fly(to camera: MLNMapCamera, edgePadding insets: UIEdgeInsets, withDuration duration: TimeInterval,
-                      completionHandler completion: (() -> Void)?) {
+    override func fly(to camera: CameraOptions, duration: TimeInterval,
+                      completion: ((UIViewAnimatingPosition) -> Void)? = nil) {
         flightCount += 1
         let flight = flightCount
-        super.fly(to: camera, edgePadding: insets, withDuration: duration) { [weak self] in
-            self?.completedFlights.insert(flight)
-            completion?()
+        super.fly(to: camera, duration: duration) { [weak self] position in
+            if position == .end { self?.completedFlights.insert(flight) }
+            completion?(position)
         }
     }
 }

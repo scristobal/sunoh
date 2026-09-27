@@ -1,6 +1,8 @@
 import CoreLocation
-import MapLibre
+import MapboxMaps
+import OSLog
 import SwiftUI
+import Turf
 
 // MARK: - Inspect Map View (view a saved geometry, no user location)
 
@@ -16,9 +18,13 @@ struct InspectMapView: View {
     @State private var map = MapViewStore()
 
     var body: some View {
-        StaticMapViewRepresentable(map: map, geometry: geometry, passages: passages, maximumZoomLevel: maximumZoomLevel,
-                                   obscuredBottom: obscuredBottom, safeTop: safeTop,
-                                   contextPadding: contextPadding, fliesToChanges: fliesToChanges)
+        if let issue = MapService.configurationIssue {
+            ContentUnavailableView("Map unavailable", systemImage: "map", description: Text(issue))
+        } else {
+            StaticMapViewRepresentable(map: map, geometry: geometry, passages: passages, maximumZoomLevel: maximumZoomLevel,
+                                       obscuredBottom: obscuredBottom, safeTop: safeTop,
+                                       contextPadding: contextPadding, fliesToChanges: fliesToChanges)
+        }
     }
 }
 
@@ -30,30 +36,43 @@ struct RecordMapView: View {
     let map: MapViewStore
 
     var body: some View {
-        MapViewRepresentable(map: map, hasLocationPermission: tracker.hasLocationPermission,
-                             userCoordinate: tracker.isLocationReady ? tracker.currentLocation : nil)
-            .onChange(of: recorder.geometryValue, initial: true) {
-                map.updateTrack(recorder.geometryValue)
-            }
-            .onAppear {
-                if tracker.hasLocationPermission { map.followUser(zoom: 14) }
-            }
+        if let issue = MapService.configurationIssue {
+            ContentUnavailableView("Map unavailable", systemImage: "map", description: Text(issue))
+        } else {
+            MapViewRepresentable(map: map, hasLocationPermission: tracker.hasLocationPermission,
+                                 userCoordinate: tracker.isLocationReady ? tracker.currentLocation : nil)
+                .onChange(of: recorder.geometryValue, initial: true) {
+                    map.updateTrack(recorder.geometryValue)
+                }
+                .onAppear {
+                    if tracker.hasLocationPermission { map.followUser(zoom: 14) }
+                }
+        }
     }
 }
 
 // MARK: - Static Map (inspect mode — no user location)
 
-final class ActivityMapView: MLNMapView {
-    var onLayout: ((MLNMapView) -> Void)?
+class ActivityMapView: MapView {
+    var onLayout: ((ActivityMapView) -> Void)?
+
+    var maximumZoomLevel: Double {
+        get { mapboxMap.cameraBounds.maxZoom }
+        set { try? mapboxMap.setCameraBounds(with: CameraBoundsOptions(maxZoom: newValue)) }
+    }
+
+    func fly(to camera: CameraOptions, duration: TimeInterval, completion: ((UIViewAnimatingPosition) -> Void)? = nil) {
+        self.camera.fly(to: camera, duration: duration, completion: completion)
+    }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        // MapLibre updates its own viewport size in super.layoutSubviews().
         onLayout?(self)
     }
 }
 
 struct StaticMapViewRepresentable: UIViewRepresentable {
+    @AppStorage(MapStyle.preferenceKey) private var selectedStyle = MapStyle.defaultSelection
     let map: MapViewStore
     let geometry: TrackGeometry
     let passages: SkiActivityDetector.Result?
@@ -64,24 +83,25 @@ struct StaticMapViewRepresentable: UIViewRepresentable {
     var fliesToChanges = false
 
     func makeUIView(context: Context) -> ActivityMapView {
-        let mapView = ActivityMapView(frame: .zero, styleURL: Self.resolvedStyleURL())
+        let mapView = ActivityMapView(frame: .zero, mapInitOptions: mapInitOptions(style: selectedStyle))
         mapView.maximumZoomLevel = maximumZoomLevel
-        mapView.showsUserLocation = false
-        mapView.showsCompassView = false
-
-        mapView.automaticallyAdjustsContentInset = false
-        mapView.logoView.isHidden = true
-        mapView.attributionButton.isHidden = true
-        mapView.delegate = context.coordinator
+        mapView.location.options.puckType = nil
+        mapView.ornaments.options.compass.visibility = .hidden
+        mapView.ornaments.options.scaleBar.visibility = .hidden
+        map.mapView = mapView
+        context.coordinator.observeStyle(in: mapView)
         mapView.onLayout = { [weak coordinator = context.coordinator] mapView in
             coordinator?.fitTrackIfNeeded(in: mapView)
         }
-        map.mapView = mapView
         return mapView
     }
 
     func updateUIView(_ mapView: ActivityMapView, context: Context) {
         mapView.maximumZoomLevel = maximumZoomLevel
+        if mapView.mapboxMap.styleURI != selectedStyle.styleURI {
+            context.coordinator.prepareForStyleChange()
+            mapView.mapboxMap.styleURI = selectedStyle.styleURI
+        }
         context.coordinator.update(geometry: geometry, passages: passages, obscuredBottom: obscuredBottom, safeTop: safeTop,
                                    contextPadding: contextPadding, fliesToChanges: fliesToChanges)
         context.coordinator.fitTrackIfNeeded(in: mapView)
@@ -90,7 +110,7 @@ struct StaticMapViewRepresentable: UIViewRepresentable {
     static func dismantleUIView(_ mapView: ActivityMapView, coordinator: Coordinator) {
         coordinator.cancelPendingFit()
         mapView.onLayout = nil
-        mapView.delegate = nil
+        coordinator.styleObservation = nil
     }
 
     func makeCoordinator() -> Coordinator {
@@ -98,7 +118,7 @@ struct StaticMapViewRepresentable: UIViewRepresentable {
                     contextPadding: contextPadding, fliesToChanges: fliesToChanges)
     }
 
-    @MainActor final class Coordinator: NSObject, @preconcurrency MLNMapViewDelegate {
+    @MainActor final class Coordinator {
         let map: MapViewStore
         private var geometry: TrackGeometry
         private var passages: SkiActivityDetector.Result?
@@ -145,15 +165,29 @@ struct StaticMapViewRepresentable: UIViewRepresentable {
             if trackChanged, hasLoadedStyle { map.updateSessionTrack(geometry, passages: passages) }
         }
 
-        func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
+        var styleObservation: AnyCancelable?
+
+        func observeStyle(in mapView: ActivityMapView) {
+            styleObservation = mapView.mapboxMap.onStyleLoaded.observe { [weak self, weak mapView] _ in
+                guard let mapView else { return }
+                self?.styleDidLoad(in: mapView)
+            }
+            if mapView.mapboxMap.isStyleLoaded { styleDidLoad(in: mapView) }
+        }
+
+        func prepareForStyleChange() {
+            hasLoadedStyle = false
+            cancelPendingFit()
+        }
+
+        func styleDidLoad(in mapView: ActivityMapView) {
             map.updateSessionTrack(geometry, passages: passages)
             hasLoadedStyle = true
-            fittedRequest = nil
             // Style loading can finish before SwiftUI gives the map a frame.
             mapView.setNeedsLayout()
         }
 
-        func fitTrackIfNeeded(in mapView: MLNMapView) {
+        func fitTrackIfNeeded(in mapView: ActivityMapView) {
             let padding = ActivityMapViewport.padding(safeTop: max(safeTop, mapView.safeAreaInsets.top),
                                                      safeBottom: mapView.safeAreaInsets.bottom, obscuredBottom: obscuredBottom,
                                                      contextPadding: contextPadding)
@@ -204,10 +238,6 @@ struct StaticMapViewRepresentable: UIViewRepresentable {
             }
         }
     }
-
-    static func resolvedStyleURL() -> URL {
-        mapStyleURL()
-    }
 }
 
 enum ActivityMapViewport {
@@ -221,73 +251,72 @@ enum ActivityMapViewport {
 // MARK: - Live Map (record mode — with user location + following)
 
 struct MapViewRepresentable: UIViewRepresentable {
+    @AppStorage(MapStyle.preferenceKey) private var selectedStyle = MapStyle.defaultSelection
     let map: MapViewStore
     let hasLocationPermission: Bool
     let userCoordinate: CLLocationCoordinate2D?
 
-    func makeUIView(context: Context) -> MLNMapView {
-        let mapView: MLNMapView
-        if let existing = map.mapView {
-            mapView = existing
-        } else {
-            mapView = MLNMapView(frame: .zero, styleURL: Self.resolvedStyleURL())
-            mapView.zoomLevel = 14
-            map.mapView = mapView
-        }
+    func makeUIView(context: Context) -> ActivityMapView {
+        let mapView = map.mapView ?? ActivityMapView(frame: .zero, mapInitOptions: mapInitOptions(style: selectedStyle))
         mapView.maximumZoomLevel = 14
-        mapView.automaticallyAdjustsContentInset = false
-        mapView.showsCompassView = false
-        mapView.logoView.isHidden = true
-        mapView.attributionButton.isHidden = true
-        mapView.delegate = context.coordinator
+        mapView.ornaments.options.compass.visibility = .hidden
+        mapView.ornaments.options.scaleBar.visibility = .hidden
+        map.mapView = mapView
+        context.coordinator.observeStyle(in: mapView)
+        updateStyle(in: mapView)
         map.updateUserLocation(hasPermission: hasLocationPermission, coordinate: userCoordinate)
-        if mapView.style != nil, hasLocationPermission {
-            map.followUser()
-        }
         return mapView
     }
 
-    func updateUIView(_ mapView: MLNMapView, context: Context) {
+    func updateUIView(_ mapView: ActivityMapView, context: Context) {
+        updateStyle(in: mapView)
         map.updateUserLocation(hasPermission: hasLocationPermission, coordinate: userCoordinate)
+    }
+
+    private func updateStyle(in mapView: ActivityMapView) {
+        if mapView.mapboxMap.styleURI != selectedStyle.styleURI {
+            mapView.mapboxMap.styleURI = selectedStyle.styleURI
+        }
+    }
+
+    static func dismantleUIView(_ mapView: ActivityMapView, coordinator: Coordinator) {
+        coordinator.styleObservation = nil
     }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(map: map)
     }
 
-    @MainActor final class Coordinator: NSObject, @preconcurrency MLNMapViewDelegate {
+    @MainActor final class Coordinator {
         let map: MapViewStore
+        var styleObservation: AnyCancelable?
 
         init(map: MapViewStore) {
             self.map = map
         }
 
-        func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
-            if mapView.showsUserLocation { map.followUser() }
-            map.renderTrack()
+        func observeStyle(in mapView: ActivityMapView) {
+            styleObservation = mapView.mapboxMap.onStyleLoaded.observe { [weak self] _ in
+                self?.map.renderTrack()
+            }
+            if mapView.mapboxMap.isStyleLoaded { map.renderTrack() }
         }
-    }
-
-    static func resolvedStyleURL() -> URL {
-        mapStyleURL()
     }
 }
 
-// MARK: - Shared style URL resolution
-
-@MainActor private func mapStyleURL() -> URL {
+@MainActor private func mapInitOptions(style: MapStyle) -> MapInitOptions {
     MapService.configure()
-    return MapService.styleURL
+    return MapInitOptions(cameraOptions: CameraOptions(zoom: 14, bearing: 0, pitch: 0), styleURI: style.styleURI)
 }
 
 // MARK: - Map state
 
 @MainActor @Observable
 final class MapViewStore {
-    var mapView: MLNMapView?
+    var mapView: ActivityMapView?
     private var needsLocationCenter = true
 
-    private var trackFeatures: [MLNPolylineFeature] = []
+    private var trackFeatures: [Feature] = []
 
     private static let trackColours: [(kind: String, colour: UIColor)] = [
         (TrackClassification.run.rawValue, .systemBlue),
@@ -297,27 +326,35 @@ final class MapViewStore {
     ]
 
     /// Center once on the first usable fix, and again after permission is restored.
-    /// Subsequent fixes use MapLibre's selected tracking mode, including free panning.
+    /// Subsequent fixes use the selected viewport state, including free panning.
     func updateUserLocation(hasPermission: Bool, coordinate: CLLocationCoordinate2D?) {
         if !hasPermission { needsLocationCenter = true }
         guard let mapView else { return }
-        if mapView.showsUserLocation != hasPermission {
-            mapView.showsUserLocation = hasPermission
+        if hasPermission {
+            if mapView.location.options.puckType == nil {
+                mapView.location.options.puckType = .puck2D()
+            }
+        } else {
+            mapView.location.options.puckType = nil
+            mapView.viewport.idle()
         }
         guard hasPermission, needsLocationCenter, let coordinate,
               CLLocationCoordinate2DIsValid(coordinate) else { return }
         needsLocationCenter = false
-        mapView.setCenter(coordinate, animated: false)
+        mapView.mapboxMap.setCamera(to: CameraOptions(center: coordinate))
         followUser()
     }
 
     func followUser(zoom: Double? = nil) {
         guard let mapView else { return }
-        mapView.showsUserLocation = true
+        mapView.location.options.puckType = .puck2D()
         if let zoom {
-            mapView.setZoomLevel(zoom, animated: false)
+            mapView.mapboxMap.setCamera(to: CameraOptions(zoom: zoom))
         }
-        mapView.setUserTrackingMode(.follow, animated: false, completionHandler: nil)
+        let state = mapView.viewport.makeFollowPuckViewportState(options: FollowPuckViewportStateOptions(
+            zoom: nil, bearing: nil, pitch: nil
+        ))
+        mapView.viewport.transition(to: state, transition: mapView.viewport.makeImmediateViewportTransition())
     }
 
     func fitTrack(_ geometry: TrackGeometry, padding: UIEdgeInsets = UIEdgeInsets(top: 60, left: 40, bottom: 60, right: 40),
@@ -347,17 +384,26 @@ final class MapViewStore {
             bounds.minLon -= 0.0005
             bounds.maxLon += 0.0005
         }
-        let coordinateBounds = MLNCoordinateBounds(
-            sw: CLLocationCoordinate2D(latitude: bounds.minLat, longitude: bounds.minLon),
-            ne: CLLocationCoordinate2D(latitude: bounds.maxLat, longitude: bounds.maxLon)
-        )
-        let camera = mapView.cameraThatFitsCoordinateBounds(coordinateBounds, edgePadding: padding)
-        if fly {
-            mapView.fly(to: camera, edgePadding: padding, withDuration: 0.6, completionHandler: nil)
-        } else {
-            // Apply padding even when the zoom cap leaves the fitted camera unchanged.
-            mapView.setCamera(camera, withDuration: 0, animationTimingFunction: nil,
-                              edgePadding: padding, completionHandler: nil)
+        let coordinates = [
+            CLLocationCoordinate2D(latitude: bounds.minLat, longitude: bounds.minLon),
+            CLLocationCoordinate2D(latitude: bounds.minLat, longitude: bounds.maxLon),
+            CLLocationCoordinate2D(latitude: bounds.maxLat, longitude: bounds.minLon),
+            CLLocationCoordinate2D(latitude: bounds.maxLat, longitude: bounds.maxLon)
+        ]
+        do {
+            let reference = CameraOptions(padding: padding, bearing: mapView.mapboxMap.cameraState.bearing,
+                                          pitch: mapView.mapboxMap.cameraState.pitch)
+            var camera = try mapView.mapboxMap.camera(for: coordinates, camera: reference, coordinatesPadding: .zero,
+                                                     maxZoom: mapView.maximumZoomLevel, offset: nil)
+            camera.padding = padding
+            if fly {
+                mapView.fly(to: camera, duration: 0.6)
+            } else {
+                mapView.camera.cancelAnimations()
+                mapView.mapboxMap.setCamera(to: camera)
+            }
+        } catch {
+            return false
         }
         return true
     }
@@ -378,41 +424,47 @@ final class MapViewStore {
         renderTrack()
     }
 
-    private static func feature(points: [TrackPoint], kind: String) -> MLNPolylineFeature? {
+    private static func feature(points: [TrackPoint], kind: String) -> Feature? {
         guard points.count >= 2 else { return nil }
-        var coordinates = points.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
-        let feature = MLNPolylineFeature(coordinates: &coordinates, count: UInt(coordinates.count))
-        feature.attributes = ["classification": kind]
+        let coordinates = points.map { CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude) }
+        var feature = Feature(geometry: .lineString(LineString(coordinates)))
+        feature.properties = ["classification": .string(kind)]
         return feature
     }
 
     /// Both live and inspected maps preserve recording and GPS-gap segments.
     func renderTrack() {
-        guard let style = mapView?.style else { return }
-        let shape: MLNShape? = trackFeatures.isEmpty ? nil : MLNShapeCollectionFeature(shapes: trackFeatures)
-        if let source = style.source(withIdentifier: "user-track") as? MLNShapeSource {
-            source.shape = shape
-        } else {
-            let source = MLNShapeSource(identifier: "user-track", shape: shape)
-            style.addSource(source)
+        guard let mapboxMap = mapView?.mapboxMap, mapboxMap.isStyleLoaded else { return }
+        let collection = FeatureCollection(features: trackFeatures)
+        if mapboxMap.sourceExists(withId: "user-track") {
+            mapboxMap.updateGeoJSONSource(withId: "user-track", geoJSON: .featureCollection(collection))
+            return
+        }
+        do {
+            var source = GeoJSONSource(id: "user-track")
+            source.data = .featureCollection(collection)
+            try mapboxMap.addSource(source)
 
-            let casing = MLNLineStyleLayer(identifier: "user-track-casing", source: source)
-            casing.lineColor = NSExpression(forConstantValue: UIColor.white)
-            casing.lineWidth = NSExpression(forConstantValue: 5)
-            casing.lineCap = NSExpression(forConstantValue: "round")
-            casing.lineJoin = NSExpression(forConstantValue: "round")
+            var casing = LineLayer(id: "user-track-casing", source: source.id)
+            casing.lineColor = .constant(StyleColor(.white))
+            casing.lineWidth = .constant(5)
+            casing.lineCap = .constant(.round)
+            casing.lineJoin = .constant(.round)
+            try mapboxMap.addLayer(casing)
 
-            style.addLayer(casing)
             for (kind, colour) in Self.trackColours {
-                let line = MLNLineStyleLayer(identifier: "user-track-\(kind)", source: source)
-                line.predicate = NSPredicate(format: "classification == %@", kind)
-                line.lineColor = NSExpression(forConstantValue: colour)
-                line.lineWidth = NSExpression(forConstantValue: 3)
-                line.lineCap = NSExpression(forConstantValue: "round")
-                line.lineJoin = NSExpression(forConstantValue: "round")
-                line.lineDashPattern = NSExpression(forConstantValue: [2, 1.5])
-                style.addLayer(line)
+                var line = LineLayer(id: "user-track-\(kind)", source: source.id)
+                line.filter = Exp(.eq) { Exp(.get) { "classification" }; kind }
+                line.lineColor = .constant(StyleColor(colour))
+                line.lineWidth = .constant(3)
+                line.lineCap = .constant(.round)
+                line.lineJoin = .constant(.round)
+                line.lineDasharray = .constant([2, 1.5])
+                try mapboxMap.addLayer(line)
             }
+        } catch {
+            // Route rendering cannot interrupt recording or saved activity inspection.
+            Logger(subsystem: "com.samuel.sunoh", category: "map").error("Unable to add the activity route layers.")
         }
     }
 }

@@ -45,7 +45,7 @@ gps: phone
 ski-data source output:
     python3 scripts/ski_data.py "$1" "$2" --zip
 
-# Prompt for map service credentials and save the private app build configuration.
+# Prompt for a public Mapbox token and save the ignored app build configuration.
 token:
     @python3 scripts/credentials.py
 

@@ -39,7 +39,6 @@ import XCTest
         app.buttons["open-activity-map"].tap()
         let close = app.buttons["close-activity-details"]
         XCTAssertTrue(close.waitForExistence(timeout: 10))
-        assertMapZoomDoesNotExceed16(app)
         capture(app, name: "Compact full screen map shows the complete activity")
         let header = mapHeaderContainer(in: app)
         XCTAssertEqual(header.staticTexts["activity-heading-date"].label, overviewDate)
@@ -54,7 +53,6 @@ import XCTest
         let expandedTop = header.frame.minY
         XCTAssertLessThan(expandedTop, compactTop - app.frame.height * 0.1)
         assertSection(card, position: "run 1 of 3", measurements: "↔ 1.0 km · ↕︎ 250 m", profileDuration: "3m 40s")
-        assertMapZoomDoesNotExceed16(app)
         capture(app, name: "Run 1 profile appears above its heading with navigation at the bottom")
         let previous = app.buttons["previous-activity-section"]
         let next = app.buttons["next-activity-section"]
@@ -66,8 +64,7 @@ import XCTest
         assertSection(card, position: "run 2 of 3", measurements: "↔ 120 m · ↕︎ 0 m", profileDuration: "1m")
         card.swipeLeft()
         assertSection(card, position: "run 3 of 3", measurements: "↔ 240 m · ↕︎ 0 m", profileDuration: "2m")
-        assertMapZoomDoesNotExceed16(app)
-        capture(app, name: "Short Run 3 keeps surrounding map context at zoom 16 or below")
+        capture(app, name: "Short Run 3 keeps surrounding map context")
         XCTAssertFalse(next.isEnabled)
         card.swipeRight()
         assertSection(card, position: "run 2 of 3", measurements: "↔ 120 m · ↕︎ 0 m", profileDuration: "1m")
@@ -81,12 +78,10 @@ import XCTest
         guard try resizeMapDetailsSheet(app, compact: true) else { return }
         XCTAssertFalse(sectionFooterIsVisible(in: app))
         XCTAssertEqual(header.staticTexts["activity-heading-date"].label, overviewDate)
-        assertMapZoomDoesNotExceed16(app)
         capture(app, name: "Collapsing the lift card restores the complete activity route")
         guard try resizeMapDetailsSheet(app, compact: false) else { return }
         XCTAssertEqual(card.staticTexts["activity-section-position"].label, "lift 1 of 1", "Changing the sheet position preserves the selected section.")
         assertProfileAndBottomControls(card, duration: "3m")
-        assertMapZoomDoesNotExceed16(app)
         capture(app, name: "Expanding again returns to the selected Lift 1 route")
         close.tap()
         XCTAssertTrue(app.buttons["open-activity-map"].waitForExistence(timeout: 10))
@@ -135,31 +130,6 @@ import XCTest
                                             "The section navigation should appear below its profile and measurements.")
             }
         }
-    }
-
-    private func assertMapZoomDoesNotExceed16(_ app: XCUIApplication) {
-        let map = app.descendants(matching: .any).matching(identifier: "activity-section-map").firstMatch
-        var samples: [Double] = []
-        var previous: Double?
-        var stableSince = Date()
-        let settled = NSPredicate { _, _ in
-            guard map.exists, let value = map.value as? String,
-                  let range = value.range(of: #"(?<=Zoom )[0-9]+(?:\.[0-9]+)?(?=x)"#, options: .regularExpression),
-                  let displayedZoom = Double(value[range]) else { return false }
-            // MapLibre reports round(zoomLevel + 1); native map tests verify the exact cap.
-            let zoom = displayedZoom - 1
-            samples.append(zoom)
-            if zoom != previous {
-                previous = zoom
-                stableSince = Date()
-                return false
-            }
-            return Date().timeIntervalSince(stableSince) >= 0.5
-        }
-        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: settled, object: map)], timeout: 6), .completed,
-                       "The native map should expose a settled zoom value after the route changes.")
-        XCTAssertFalse(samples.isEmpty)
-        XCTAssertTrue(samples.allSatisfy { $0 <= 16 }, "The native map exceeded zoom 16: \(samples)")
     }
 
     private func launchTimelineApp() -> XCUIApplication? {

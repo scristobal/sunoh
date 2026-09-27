@@ -4,7 +4,7 @@
 
 - Keep this a native iPhone app with its Live Activity companion. Write app logic in Swift and use native persistence. Do not add other platforms or foreign language bridges.
 - Keep recording and personal history useful without an account, backup or social sharing. Private backup and social sharing must remain optional and independently selectable; personal progress must not depend on social competition.
-- Preserve offline use as a product requirement, including first launch. Hosted maps do not replace the deferred requirement for a small bundled fallback that works without online authentication. Its packaging needs an explicit decision.
+- Basic offline should be provided. Region downloads are deferred until the Mapbox migration is complete.
 
 ## Recording and preservation
 
@@ -49,8 +49,8 @@
 
 - Keep development credentials and private recordings out of version control. Large offline map data also belongs outside the source repository.
 - Keep infrastructure management and publication credentials out of the app. Send map-access credentials only to the intended secure service, including after redirects, and never expose them through diagnostics.
-- Treat controlled-device access as a development arrangement. The agreed public design uses App Attest to obtain renewable Cloudflare Access credentials without requiring user accounts. The delivery service owns issuance and revocation; the app provides installation proof and refreshes its credentials.
-- Keep development and production verification separate. Any unsupported-device policy needs an explicit decision; do not add a silent production bypass.
+- Use Mapbox for map rendering and delivery. Keep the selected style configurable.
+- Use a public Mapbox access token in the app.
 - Keep access failures separate from recording and history. Preserve offline use when changing authentication or map delivery.
 
 ## Validation
