@@ -39,46 +39,7 @@ private final class FailingCommit: Sendable {
 private final class GPXFixtureBundle: NSObject {}
 
 struct ActivityRepositoryTests {
-    #if DEBUG && targetEnvironment(simulator)
-    @Test func cleanRemovesAllActivityStatesAndTheirOwnedData() async throws {
-        let fixture = try await Fixture.create()
-        defer { try? FileManager.default.removeItem(at: fixture.directory) }
-        let track = GPXTrack(segments: [GPXSegment(points: [point(10_001), point(20_001)])])
-        let imported = try await fixture.repository.importTracks([track])
-        let saved = try #require(imported.imported.first)
-        _ = try await ActivityProcessor(repository: fixture.repository).process(id: saved.id)
-        let active = try await fixture.repository.start()
-        _ = try await fixture.repository.append([point(1_001)], activityID: active.id)
-        #expect(try await fixture.repository.cleanActivities() == 2)
-        let reopened = try await ActivityRepository.open(url: fixture.directory.appendingPathComponent("test.store"))
-        #expect(try await reopened.summaries().isEmpty)
-        #expect(try await reopened.active() == nil)
-        let container = try ActivityDatabase.container(at: fixture.directory.appendingPathComponent("test.store"))
-        let context = ModelContext(container)
-        #expect(try context.fetchCount(FetchDescriptor<StoredTrackPoint>()) == 0)
-        #expect(try context.fetchCount(FetchDescriptor<StoredTrackSegment>()) == 0)
-        #expect(try context.fetchCount(FetchDescriptor<StoredActivityAnalysis>()) == 0)
-        #expect(try await reopened.cleanActivities() == 0)
-        let next = try await reopened.start()
-        _ = try await reopened.pause(id: next.id)
-        #expect(try await reopened.cleanActivities() == 1)
-        #expect(try await reopened.active() == nil)
-    }
-
-    @Test func failedCleanPreservesSavedObservations() async throws {
-        let fixture = try await Fixture.create()
-        defer { try? FileManager.default.removeItem(at: fixture.directory) }
-        let track = GPXTrack(segments: [GPXSegment(points: [point(10_001)])])
-        let result = try await fixture.repository.importTracks([track])
-        let saved = try #require(result.imported.first)
-        let failure = FailingCommit()
-        let repository = try await ActivityRepository.open(url: fixture.directory.appendingPathComponent("test.store"), commit: failure.save)
-        failure.fail()
-        await #expect(throws: ActivityError.self) { try await repository.cleanActivities() }
-        let reopened = try await ActivityRepository.open(url: fixture.directory.appendingPathComponent("test.store"))
-        #expect(try await reopened.recordedTrack(id: saved.id).gpx == track)
-    }
-
+    #if DEBUG
     @Test func gpxSeedPersistsObservationsAndSkipsDuplicatesAfterReopening() async throws {
         let fixture = try await Fixture.create()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }

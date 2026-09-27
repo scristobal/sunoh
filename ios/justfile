@@ -8,7 +8,8 @@ SCHEME := "Sunoh"
 BUNDLE_ID := "com.samuel.sunoh"
 DERIVED := justfile_directory() / ".build"
 APP := DERIVED / "Build/Products/Debug-iphonesimulator/Sunoh.app"
-SEED := env("SEED", justfile_directory() / ".local/seed")
+SLOPES_EXPORT := env("SLOPES_EXPORT", "/Volumes/Downloads/sunoh/exports/slopes-21-09-2026")
+SEED_ROOT := justfile_directory() / ".local/seed/slopes-2025-2026"
 PHONE_UDID := `printenv PHONE_UDID || xcrun simctl list devices available -j | python3 scripts/simulator.py`
 
 # List development commands without starting an operation.
@@ -48,20 +49,28 @@ ski-data source output:
 token:
     @python3 scripts/credentials.py
 
-[private]
-source:
-    @python3 scripts/seed.py --check {{ quote(SEED) }}
+# Regenerate and validate the 2025/2026 seed from the original Slopes exports.
+prepare-seed:
+    python3 scripts/slopes_to_gpx.py --source {{ quote(SLOPES_EXPORT) }} --output {{ quote(SEED_ROOT) }}
+    python3 scripts/seed.py --check --manifest {{ quote(SEED_ROOT / "manifest.json") }} {{ quote(SEED_ROOT / "gpx") }}
 
-# Import a GPX file or directory with just SEED=/path/to/tracks seed.
-seed: source build
+# Build and import the 2025/2026 Slopes season into the selected simulator.
+seed: prepare-seed build
     xcrun simctl terminate {{ quote(PHONE_UDID) }} {{ quote(BUNDLE_ID) }} 2>/dev/null || true
     xcrun simctl install {{ quote(PHONE_UDID) }} {{ quote(APP) }}
-    python3 scripts/seed.py {{ quote(PHONE_UDID) }} {{ quote(BUNDLE_ID) }} {{ quote(SEED) }}
+    python3 scripts/seed.py --manifest {{ quote(SEED_ROOT / "manifest.json") }} {{ quote(PHONE_UDID) }} {{ quote(BUNDLE_ID) }} {{ quote(SEED_ROOT / "gpx") }}
     python3 scripts/simulator.py --open
 
-# Delete all activities, including unfinished recordings, from the selected simulator.
+# Build, install and seed a physical iPhone selected explicitly by device identifier.
+seed-device device: prepare-seed
+    xcodebuild -project {{ quote(PROJECT) }} -scheme {{ quote(SCHEME) }} -destination {{ quote("id=" + device) }} -derivedDataPath {{ quote(DERIVED) }} -allowProvisioningUpdates build
+    xcrun devicectl device install app --device {{ quote(device) }} {{ quote(DERIVED / "Build/Products/Debug-iphoneos/Sunoh.app") }}
+    python3 scripts/seed.py --physical --manifest {{ quote(SEED_ROOT / "manifest.json") }} {{ quote(device) }} {{ quote(BUNDLE_ID) }} {{ quote(SEED_ROOT / "gpx") }}
+
+# Wipe the selected simulator installation and recreate the current V0 store.
 clean: build
     xcrun simctl terminate {{ quote(PHONE_UDID) }} {{ quote(BUNDLE_ID) }} 2>/dev/null || true
+    xcrun simctl uninstall {{ quote(PHONE_UDID) }} {{ quote(BUNDLE_ID) }}
     xcrun simctl install {{ quote(PHONE_UDID) }} {{ quote(APP) }}
-    python3 scripts/clean.py {{ quote(PHONE_UDID) }} {{ quote(BUNDLE_ID) }}
+    xcrun simctl launch {{ quote(PHONE_UDID) }} {{ quote(BUNDLE_ID) }}
     python3 scripts/simulator.py --open

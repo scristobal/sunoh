@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 @main struct SunohApp: App {
     private struct Ready { let recorder: RecordingController; let library: ActivityLibrary; let location: LocationTracker }
@@ -9,25 +10,15 @@ import SwiftUI
 
     var body: some Scene {
         WindowGroup {
-            Group {
-                #if DEBUG
-                if UITestFixture.isReference {
-                    NativeControlsAuditView()
-                } else {
-                    appContent
+            appContent
+                .task { await openDatabase() }
+                .onChange(of: scenePhase) {
+                    guard scenePhase == .active, case .ready(let ready) = startup else { return }
+                    ready.location.activate()
+                    Task { await ready.recorder.refresh(); await ready.library.reloadHistory() }
                 }
-                #else
-                appContent
-                #endif
-            }
-            .task { await openDatabase() }
-            .onChange(of: scenePhase) {
-                guard scenePhase == .active, case .ready(let ready) = startup else { return }
-                ready.location.activate()
-                Task { await ready.recorder.refresh(); await ready.library.reloadHistory() }
-            }
-            .preferredColorScheme(.light)
-            .tint(.black)
+                .preferredColorScheme(.light)
+                .tint(.black)
         }
     }
 
@@ -51,7 +42,6 @@ import SwiftUI
 
     private func openDatabase() async {
         #if DEBUG
-        if UITestFixture.isReference { return }
         if UITestFixture.scenario == "startup-error" {
             startup = .failed("Sunō could not open the activity store. Your existing recordings have not been changed. Restart the app and try again.")
             return
@@ -70,18 +60,16 @@ import SwiftUI
             #else
             repository = try await ActivityRepository.open()
             #endif
-            #if DEBUG && targetEnvironment(simulator)
-            if ProcessInfo.processInfo.arguments.contains("--clean") {
-                let removed = try await repository.cleanActivities()
-                print("SUNOH_CLEAN_OK removed=\(removed)")
-                exit(EXIT_SUCCESS)
-            }
+            #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--seed") {
+                UIApplication.shared.isIdleTimerDisabled = true
+                defer { UIApplication.shared.isIdleTimerDisabled = false }
                 let arguments = ProcessInfo.processInfo.arguments
                 guard let flag = arguments.firstIndex(of: "--seed"), arguments.indices.contains(flag + 1) else {
                     throw GPXError.invalid("Provide a directory of GPX seed files.")
                 }
-                let directory = URL(fileURLWithPath: arguments[flag + 1], isDirectory: true)
+                let directory = URL(fileURLWithPath: arguments[flag + 1], isDirectory: true,
+                                    relativeTo: URL(fileURLWithPath: NSHomeDirectory(), isDirectory: true))
                 let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
                     .filter { $0.pathExtension.lowercased() == "gpx" }.sorted { $0.lastPathComponent < $1.lastPathComponent }
                 guard !files.isEmpty else { throw GPXError.noTracks }
@@ -91,8 +79,12 @@ import SwiftUI
                     imported += result.imported.count; skipped += result.skipped
                     print("SUNOH_SEED_FILE \(file.lastPathComponent) imported=\(result.imported.count) skipped=\(result.skipped)")
                 }
+                if directory.deletingLastPathComponent().standardizedFileURL == FileManager.default.temporaryDirectory.standardizedFileURL,
+                   directory.lastPathComponent.hasPrefix("sunoh-device-seed-") || directory.lastPathComponent == "sunoh-seed" {
+                    try FileManager.default.removeItem(at: directory)
+                }
                 print("SUNOH_SEED_OK imported=\(imported) skipped=\(skipped)")
-                // This simulator-only launch acts as a command for `just seed`.
+                // This Debug launch acts as a command for the development seed workflow.
                 // Exit only after every GPX import has been saved.
                 exit(EXIT_SUCCESS)
             }
@@ -113,11 +105,7 @@ import SwiftUI
             location.activate()
             await library.reloadHistory()
         } catch {
-            #if DEBUG && targetEnvironment(simulator)
-            if ProcessInfo.processInfo.arguments.contains("--clean") {
-                print("SUNOH_CLEAN_ERROR \(error.localizedDescription)")
-                exit(EXIT_FAILURE)
-            }
+            #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--seed") {
                 print("SUNOH_SEED_ERROR \(error.localizedDescription)")
                 exit(EXIT_FAILURE)

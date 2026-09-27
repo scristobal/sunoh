@@ -132,7 +132,7 @@ struct SkiActivityDetectorTests {
         #expect(result.lifts == [.init(startedAt: 0, endedAt: 180_000)])
         #expect(result.runs == [.init(startedAt: 180_000, endedAt: 300_000)])
         #expect(Geo.timeline(in: geometry, passages: result).entries.map(\.kind) == [.lift, .run])
-        #expect(abs(Geo.skiStatistics(in: geometry, passages: result).liftElevationGainMeters - 250) < 0.000001)
+        #expect(abs((Geo.timeline(in: geometry, passages: result).entries.first { $0.kind == .lift }?.elevationGainMeters ?? 0) - 250) < 0.000001)
     }
 
     @Test(arguments: [60, 180, 600]) func aLiftThatTemporarilyStopsRemainsOneLift(stopSeconds: Int) {
@@ -152,7 +152,7 @@ struct SkiActivityDetectorTests {
         }
         #expect(Geo.timeline(in: geometry, passages: result).entries.map(\.kind) == [.lift, .run])
         #expect(Geo.classifiedSections(in: geometry, passages: result).map(\.classification) == [.lift, .run])
-        #expect(Geo.skiStatistics(in: geometry, passages: result).liftDurationMilliseconds == Int64(240 + stopSeconds) * 1_000)
+        #expect(Geo.timeline(in: geometry, passages: result).entries.first { $0.kind == .lift }?.durationMilliseconds == Int64(240 + stopSeconds) * 1_000)
     }
 
     @Test(arguments: [true, false]) func stopsBetweenRunAndLiftBelongToTheRun(downhillFirst: Bool) {
@@ -167,7 +167,7 @@ struct SkiActivityDetectorTests {
         #expect(result.liftCount == 1)
         #expect(result.lifts.first == .init(startedAt: downhillFirst ? 300_000 : 0, endedAt: downhillFirst ? 420_000 : 120_000))
         #expect(Geo.timeline(in: geometry, passages: result).entries.count == 2)
-        #expect(Geo.skiStatistics(in: geometry, passages: result).liftDurationMilliseconds == 120_000)
+        #expect(Geo.timeline(in: geometry, passages: result).entries.first { $0.kind == .lift }?.durationMilliseconds == 120_000)
     }
 
     @Test func aStationarySessionIsOneRunWithAllItsOriginalPoints() {

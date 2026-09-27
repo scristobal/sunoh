@@ -41,64 +41,6 @@ struct RecordMapView: View {
     }
 }
 
-// MARK: - Recording controls
-
-struct RecordControls: View {
-    let tracker: LocationTracker
-    let recorder: RecordingController
-
-    var body: some View {
-        VStack(alignment: .leading) {
-            RecordingSummary(tracker: tracker, recorder: recorder)
-            RecordingMessages(tracker: tracker, recorder: recorder)
-        }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-struct RecordingSummary: View {
-    let tracker: LocationTracker
-    let recorder: RecordingController
-
-    private var status: RecordingStatus {
-        recorder.recordingStatus.withLocationReadiness(tracker.isLocationReady)
-    }
-
-    var body: some View {
-        RecordingActionRow(recorder: recorder, status: status)
-            .labelStyle(.titleAndIcon)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-struct RecordingMessages: View {
-    let tracker: LocationTracker
-    let recorder: RecordingController
-
-    var body: some View {
-        VStack(alignment: .leading) {
-            if let message = tracker.locationMessage {
-                Text(message).font(.callout).foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if let error = recorder.storageError {
-                Text(error).font(.callout).foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-                if recorder.requiresRestart {
-                    Text("Restart Sunō to reopen storage. Pending points have not been saved.")
-                        .font(.caption)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    Button("Retry") { Task { await recorder.refresh() } }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
-                }
-            }
-        }
-    }
-}
-
 // MARK: - Static Map (inspect mode — no user location)
 
 final class ActivityMapView: MLNMapView {
@@ -320,10 +262,6 @@ struct MapViewRepresentable: UIViewRepresentable {
             self.map = map
         }
 
-        func mapView(_ mapView: MLNMapView, didChange mode: MLNUserTrackingMode, animated: Bool) {
-            map.trackingMode = mode
-        }
-
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
             if mapView.showsUserLocation { map.followUser() }
             map.renderTrack()
@@ -347,27 +285,10 @@ struct MapViewRepresentable: UIViewRepresentable {
 @MainActor @Observable
 final class MapViewStore {
     var mapView: MLNMapView?
-    var trackingMode: MLNUserTrackingMode = .none
     private var needsLocationCenter = true
-
-    var trackingIcon: String {
-        switch trackingMode {
-        case .follow: "location.fill"
-        case .followWithHeading: "location.north.line.fill"
-        default: "location"
-        }
-    }
-    var trackingLabel: String {
-        switch trackingMode {
-        case .follow: "Following location"
-        case .followWithHeading: "Following heading"
-        default: "Free map"
-        }
-    }
 
     private var trackFeatures: [MLNPolylineFeature] = []
 
-    // Temporary session colours for checking the detector against the route.
     private static let trackColours: [(kind: String, colour: UIColor)] = [
         (TrackClassification.run.rawValue, .systemBlue),
         (TrackClassification.lift.rawValue, .systemGreen),
@@ -390,22 +311,6 @@ final class MapViewStore {
         followUser()
     }
 
-    func clearTrack() {
-        trackFeatures = []
-        guard let style = mapView?.style else { return }
-        for (kind, _) in Self.trackColours {
-            if let layer = style.layer(withIdentifier: "user-track-\(kind)") {
-                style.removeLayer(layer)
-            }
-        }
-        if let layer = style.layer(withIdentifier: "user-track-casing") {
-            style.removeLayer(layer)
-        }
-        if let source = style.source(withIdentifier: "user-track") {
-            style.removeSource(source)
-        }
-    }
-
     func followUser(zoom: Double? = nil) {
         guard let mapView else { return }
         mapView.showsUserLocation = true
@@ -413,17 +318,6 @@ final class MapViewStore {
             mapView.setZoomLevel(zoom, animated: false)
         }
         mapView.setUserTrackingMode(.follow, animated: false, completionHandler: nil)
-    }
-
-    func cycleTrackingMode() {
-        guard let mapView else { return }
-        mapView.showsUserLocation = true
-        let next: MLNUserTrackingMode = switch trackingMode {
-        case .none: .follow
-        case .follow: .followWithHeading
-        default: .none
-        }
-        mapView.setUserTrackingMode(next, animated: true, completionHandler: nil)
     }
 
     func fitTrack(_ geometry: TrackGeometry, padding: UIEdgeInsets = UIEdgeInsets(top: 60, left: 40, bottom: 60, right: 40),

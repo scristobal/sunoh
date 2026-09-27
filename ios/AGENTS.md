@@ -11,7 +11,7 @@
 - Keep recording independent of view lifetime, navigation, route rendering and map-service availability. Backgrounding the app must not end an active recording.
 - Treat persisted observations as the source of truth. Never present points as saved before persistence succeeds, and make failures and unsaved work visible.
 - Resuming must continue the same activity. Preserve recorded observations and pause boundaries through saving, reopening and changes to storage.
-- Preserve existing recordings during changes. Keep consistent backups and verify original observations before accepting a migration or restore. Recovery must establish that storage is healthy before presenting it as ready.
+- All current installations are controlled and can be wiped and reseeded. Keep a single V0 storage schema and reset incompatible development stores instead of maintaining historical schemas or migration paths.
 - Keep tests and development data preparation separate from the user's live recording store. Do not reset or replace real recordings to make a test pass.
 
 ## Analysis and data exchange
@@ -31,9 +31,12 @@
 - Export what the recorder provided: timestamps, coordinates, optional recorded elevation and segment boundaries. Do not substitute calculated statistics or inferred samples. Sharing previews must not change the exported recording.
 - Preserve existing recordings during data exchange and keep history responsive as it grows. Detailed import and export behavior belongs in executable checks.
 - Use GPX as the external format for development track seeds. Keep app-specific storage fields out of seed files.
+- Always seed simulators and development installations from the original Slopes exports for the 2025/2026 season, defined as July 1, 2025 through June 30, 2026, unless the user explicitly requests another source or season. Preserve raw observations and let Sunō derive activity analysis.
+- Keep original seed archives outside the repository. Use the ignored local seed directory only for disposable GPX files generated from those archives and their verification manifest; never fall back to another dataset or an unverified cache.
 
 ## Interaction and accessibility
 
+- Keep the approved interface design and interactions intact during cleanup. Change the design only when explicitly requested.
 - Prefer native SwiftUI navigation and presentation. Let content and available space determine layout; do not depend on a particular device's dimensions or fixed safe areas.
 - Make map previews tap targets that open the interactive map with a native zoom transition. Keep other map gestures in the full-screen presentation and keep draggable map details separate from tab navigation.
 - Keep recording controls separate from full-screen map exploration.

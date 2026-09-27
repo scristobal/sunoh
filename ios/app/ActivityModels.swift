@@ -67,8 +67,8 @@ struct TrackPoint: Codable, Hashable, Sendable {
 }
 
 enum ActivityStatus: String, Codable, Sendable { case recording, paused, completed }
-enum ActivityOrigin: String, Codable, Sendable { case deviceRecording, gpxImport, legacyUnknown }
-enum SegmentBoundary: String, Codable, Sendable { case recordingStarted, recordingResumed, importedSegment, legacyUnknown }
+enum ActivityOrigin: String, Codable, Sendable { case deviceRecording, gpxImport }
+enum SegmentBoundary: String, Codable, Sendable { case recordingStarted, recordingResumed, importedSegment }
 enum RecordingPhase: String, Codable, Sendable { case recording, paused }
 
 struct ActivitySummary: Codable, Equatable, Identifiable, Sendable {
@@ -77,7 +77,7 @@ struct ActivitySummary: Codable, Equatable, Identifiable, Sendable {
     let lastPointAt: Timestamp?
     var completedAt: Timestamp? = nil
     var importedAt: Timestamp? = nil
-    var origin: ActivityOrigin = .legacyUnknown
+    var origin: ActivityOrigin = .deviceRecording
     var status: ActivityStatus = .completed
     let pointCount: Int
     var sourceRevision: Int64 = 0
@@ -136,24 +136,14 @@ struct ActivityStatistics: Codable, Equatable, Sendable {
     var maximumElevationMeters: Double?
     var minimumElevationMeters: Double?
     var runCount = 0
-    var liftCount = 0
     var averageDownhillSpeedMetersPerSecond: Double?
-    var averageLiftSpeedMetersPerSecond: Double?
     var runDistanceMeters = 0.0
-    var liftDistanceMeters = 0.0
     var runDurationMilliseconds: Int64 = 0
-    var liftDurationMilliseconds: Int64 = 0
     var maximumRunSpeedMetersPerSecond: Double?
     var tallestRunHeightMeters: Double?
     var longestRunDistanceMeters: Double?
-    var runElevationLossMeters = 0.0
-    var liftElevationGainMeters = 0.0
-    var tallestLiftHeightMeters: Double?
-    var longestLiftDistanceMeters: Double?
     var averageRunSteepnessPercent: Double?
-    var averageLiftSteepnessPercent: Double?
     var maximumRunSteepnessPercent: Double?
-    var maximumLiftSteepnessPercent: Double?
 
     init() {}
 }

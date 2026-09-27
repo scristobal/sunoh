@@ -6,29 +6,19 @@ extension Geo {
 
     struct SkiStatistics: Equatable, Sendable {
         var runDistanceMeters = 0.0
-        var liftDistanceMeters = 0.0
-        var runElevationLossMeters = 0.0
-        var liftElevationGainMeters = 0.0
         var runDurationMilliseconds: Int64 = 0
-        var liftDurationMilliseconds: Int64 = 0
         var averageDownhillSpeedMetersPerSecond: Double?
-        var averageLiftSpeedMetersPerSecond: Double?
         var maximumRunSpeedMetersPerSecond: Double?
         var tallestRunHeightMeters: Double?
         var longestRunDistanceMeters: Double?
-        var tallestLiftHeightMeters: Double?
-        var longestLiftDistanceMeters: Double?
         // Grades weight eligible horizontal distance; maxima compare whole passage averages.
         var averageRunSteepnessPercent: Double?
-        var averageLiftSteepnessPercent: Double?
         var maximumRunSteepnessPercent: Double?
-        var maximumLiftSteepnessPercent: Double?
     }
 
     /// Measures original observations within detected passages. Time includes stops and long sample intervals, but never bridges source boundaries.
     static func skiStatistics(in geometry: TrackGeometry, passages: SkiActivityDetector.Result) -> SkiStatistics {
-        var measured = (passages.runs.map { MeasuredPassage(range: $0, isRun: true) }
-            + passages.lifts.map { MeasuredPassage(range: $0, isRun: false) })
+        var measured = passages.runs.map { MeasuredPassage(range: $0) }
             .sorted { $0.range.startedAt < $1.range.startedAt }
         var firstCandidate = 0
         for section in geometry.sections {
@@ -77,51 +67,27 @@ extension Geo {
         }
         var result = SkiStatistics()
         var runMovingDistance = 0.0, runMovingSeconds = 0.0
-        var liftMovingDistance = 0.0, liftMovingSeconds = 0.0
         var runSteepnessDistance = 0.0, runSteepnessDescent = 0.0
-        var liftSteepnessDistance = 0.0, liftSteepnessAscent = 0.0
         for passage in measured {
-            if passage.isRun {
-                result.runDistanceMeters += passage.distanceMeters
-                result.runElevationLossMeters += passage.elevationLossMeters
-                result.runDurationMilliseconds += passage.durationMilliseconds
-                runMovingDistance += passage.movingDistanceMeters
-                runMovingSeconds += passage.movingSeconds
-                runSteepnessDistance += passage.steepnessDistanceMeters
-                runSteepnessDescent += passage.steepnessDescentMeters
-                if let steepness = gradePercent(verticalMeters: passage.steepnessDescentMeters, horizontalMeters: passage.steepnessDistanceMeters) {
-                    result.maximumRunSteepnessPercent = max(result.maximumRunSteepnessPercent ?? steepness, steepness)
-                }
-                if let speed = passage.maximumSpeed { result.maximumRunSpeedMetersPerSecond = max(result.maximumRunSpeedMetersPerSecond ?? speed, speed) }
-                if let low = passage.minimumElevation, let high = passage.maximumElevation {
-                    result.tallestRunHeightMeters = max(result.tallestRunHeightMeters ?? 0, high - low)
-                }
-                if passage.durationMilliseconds > 0 {
-                    result.longestRunDistanceMeters = max(result.longestRunDistanceMeters ?? 0, passage.distanceMeters)
-                }
-            } else {
-                result.liftDistanceMeters += passage.distanceMeters
-                result.liftElevationGainMeters += passage.elevationGainMeters
-                result.liftDurationMilliseconds += passage.durationMilliseconds
-                liftMovingDistance += passage.movingDistanceMeters
-                liftMovingSeconds += passage.movingSeconds
-                liftSteepnessDistance += passage.steepnessDistanceMeters
-                liftSteepnessAscent += passage.steepnessAscentMeters
-                if let steepness = gradePercent(verticalMeters: passage.steepnessAscentMeters, horizontalMeters: passage.steepnessDistanceMeters) {
-                    result.maximumLiftSteepnessPercent = max(result.maximumLiftSteepnessPercent ?? steepness, steepness)
-                }
-                if let low = passage.minimumElevation, let high = passage.maximumElevation {
-                    result.tallestLiftHeightMeters = max(result.tallestLiftHeightMeters ?? 0, high - low)
-                }
-                if passage.durationMilliseconds > 0 {
-                    result.longestLiftDistanceMeters = max(result.longestLiftDistanceMeters ?? 0, passage.distanceMeters)
-                }
+            result.runDistanceMeters += passage.distanceMeters
+            result.runDurationMilliseconds += passage.durationMilliseconds
+            runMovingDistance += passage.movingDistanceMeters
+            runMovingSeconds += passage.movingSeconds
+            runSteepnessDistance += passage.steepnessDistanceMeters
+            runSteepnessDescent += passage.steepnessDescentMeters
+            if let steepness = gradePercent(verticalMeters: passage.steepnessDescentMeters, horizontalMeters: passage.steepnessDistanceMeters) {
+                result.maximumRunSteepnessPercent = max(result.maximumRunSteepnessPercent ?? steepness, steepness)
+            }
+            if let speed = passage.maximumSpeed { result.maximumRunSpeedMetersPerSecond = max(result.maximumRunSpeedMetersPerSecond ?? speed, speed) }
+            if let low = passage.minimumElevation, let high = passage.maximumElevation {
+                result.tallestRunHeightMeters = max(result.tallestRunHeightMeters ?? 0, high - low)
+            }
+            if passage.durationMilliseconds > 0 {
+                result.longestRunDistanceMeters = max(result.longestRunDistanceMeters ?? 0, passage.distanceMeters)
             }
         }
         result.averageDownhillSpeedMetersPerSecond = runMovingSeconds > 0 ? runMovingDistance / runMovingSeconds : nil
-        result.averageLiftSpeedMetersPerSecond = liftMovingSeconds > 0 ? liftMovingDistance / liftMovingSeconds : nil
         result.averageRunSteepnessPercent = gradePercent(verticalMeters: runSteepnessDescent, horizontalMeters: runSteepnessDistance)
-        result.averageLiftSteepnessPercent = gradePercent(verticalMeters: liftSteepnessAscent, horizontalMeters: liftSteepnessDistance)
         return result
     }
 
@@ -133,10 +99,7 @@ extension Geo {
 
     private struct MeasuredPassage {
         let range: SkiActivityDetector.Passage
-        let isRun: Bool
         var distanceMeters = 0.0
-        var elevationGainMeters = 0.0
-        var elevationLossMeters = 0.0
         var durationMilliseconds: Int64 = 0
         var movingDistanceMeters = 0.0
         var movingSeconds = 0.0
@@ -144,7 +107,6 @@ extension Geo {
         var minimumElevation: Double?
         var maximumElevation: Double?
         var steepnessDistanceMeters = 0.0
-        var steepnessAscentMeters = 0.0
         var steepnessDescentMeters = 0.0
 
         mutating func includeMovement(speed: Double, milliseconds: Int64) {
@@ -167,16 +129,11 @@ extension Geo {
         mutating func includeElevationChange(from start: Double, to end: Double) {
             includeElevation(start)
             includeElevation(end)
-            let change = end - start
-            guard change.isFinite else { return }
-            elevationGainMeters += max(0, change)
-            elevationLossMeters += max(0, -change)
         }
 
         mutating func includeSteepness(distanceMeters: Double, elevationChange: Double) {
             guard distanceMeters.isFinite, distanceMeters > 0, elevationChange.isFinite else { return }
             steepnessDistanceMeters += distanceMeters
-            steepnessAscentMeters += max(0, elevationChange)
             steepnessDescentMeters += max(0, -elevationChange)
         }
     }

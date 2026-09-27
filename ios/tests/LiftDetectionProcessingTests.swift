@@ -26,11 +26,10 @@ struct LiftDetectionProcessingTests {
         #expect(result.passages == SkiActivityDetector.Result(lifts: [.init(startedAt: 0, endedAt: 120_000)]))
         #expect(result.timeline?.entries.map(\.kind) == [.lift])
         #expect(result.statistics.runCount == 0)
-        #expect(result.statistics.liftCount == 1)
         #expect(result.statistics.runDurationMilliseconds == 0)
-        #expect(result.statistics.liftDurationMilliseconds == 120_000)
-        #expect(abs(result.statistics.liftDistanceMeters - 360) < 0.001)
-        #expect(result.statistics.liftElevationGainMeters == 0)
+        #expect(result.timeline?.entries.first?.durationMilliseconds == 120_000)
+        #expect(abs((try #require(result.timeline?.entries.first?.distanceMeters)) - 360) < 0.001)
+        #expect(result.timeline?.entries.first?.elevationGainMeters == 0)
         #expect(result.thumbnailPNG != nil)
         let matching = try #require(result.timeline?.skiMatches)
         #expect(matching.datasetVersion == "lift-processing-fixture")
@@ -68,10 +67,9 @@ struct LiftDetectionProcessingTests {
         let result = try await processor.process(id: activity.id)
         #expect(result.passages == baseline)
         #expect(result.timeline?.entries == Geo.timeline(in: geometry, passages: baseline).entries)
-        #expect(result.statistics.liftCount == 1)
-        #expect(result.statistics.liftDurationMilliseconds == 120_000)
-        #expect(abs(result.statistics.liftDistanceMeters - 360) < 0.001)
-        #expect(result.statistics.liftElevationGainMeters == 120)
+        #expect(result.timeline?.entries.first?.durationMilliseconds == 120_000)
+        #expect(abs((try #require(result.timeline?.entries.first?.distanceMeters)) - 360) < 0.001)
+        #expect(result.timeline?.entries.first?.elevationGainMeters == 120)
         #expect(result.isCurrent(for: activity))
         let matching = try #require(result.timeline?.skiMatches)
         #expect(matching.entries == [[]])
@@ -84,7 +82,7 @@ struct LiftDetectionProcessingTests {
         #expect(try await repository.recordedTrack(id: activity.id).gpx == source)
     }
 
-    @Test(arguments: [23, 24, 25]) func previousFlatRunIsRebuiltUsingLiftReferenceEvidence(version: Int) async throws {
+    @Test func staleAnalysisIsRebuiltUsingLiftReferenceEvidence() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         try fixture.createReferencePackages()
@@ -97,7 +95,7 @@ struct LiftDetectionProcessingTests {
         let baseline = try await baselineProcessor.process(id: activity.id)
         #expect(baseline.timeline?.entries.map(\.kind) == [.run])
         let previous = ActivityAnalysis(activityID: activity.id, sourceRevision: activity.sourceRevision,
-            processingVersion: version, processedAt: baseline.processedAt, statistics: baseline.statistics,
+            processingVersion: ActivityAnalysis.currentProcessingVersion - 1, processedAt: baseline.processedAt, statistics: baseline.statistics,
             thumbnailPNG: baseline.thumbnailPNG, passages: baseline.passages, timeline: baseline.timeline)
         try await repository.saveAnalysis(previous)
         #expect(!previous.isCurrent(for: activity))
@@ -112,7 +110,6 @@ struct LiftDetectionProcessingTests {
         #expect(lookups.withLock { $0 } == 1)
         #expect(result.isCurrent(for: activity))
         #expect(result.statistics.runCount == 0)
-        #expect(result.statistics.liftCount == 1)
         #expect(result.timeline?.entries.map(\.kind) == [.lift])
         #expect(result.timeline?.skiMatches?.entries.first?.map(\.feature.id) == ["flat-lift"])
         #expect(try await repository.storedAnalysis(id: activity.id) == result)

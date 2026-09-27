@@ -134,7 +134,6 @@ struct ActivityTimelineTests {
         #expect(entries[0].quality?.sampleGapHistogram == histogram([5: 6]))
         let statistics = Geo.skiStatistics(in: geometry, passages: passages)
         #expect(abs(statistics.runDistanceMeters - 200) < 0.000001)
-        #expect(statistics.runElevationLossMeters == 200)
         #expect(statistics.runDurationMilliseconds == 30_000)
         #expect(passages.runCount == 1)
         #expect(Geo.classifiedSections(in: geometry, passages: passages) == [ClassifiedTrackSection(classification: .run, points: points)])

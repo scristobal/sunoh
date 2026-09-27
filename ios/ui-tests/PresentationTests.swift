@@ -5,37 +5,6 @@ import XCTest
         continueAfterFailure = true
     }
 
-    func testActivityPresentationAndAccessibility() throws {
-        let app = launch()
-        try audit(app, name: "map")
-        app.tabBars.buttons["Activities"].tap()
-        let activity = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "activity-row-")).firstMatch
-        XCTAssertTrue(activity.waitForExistence(timeout: 15))
-        try audit(app, name: "activities")
-        activity.tap()
-        let map = app.buttons["open-activity-map"]
-        XCTAssertTrue(map.waitForExistence(timeout: 10))
-        try audit(app, name: "overview")
-        XCTAssertTrue(app.buttons["delete-activity"].exists)
-        map.tap()
-        let close = app.buttons["close-activity-details"]
-        XCTAssertTrue(close.waitForExistence(timeout: 10))
-        try audit(app, name: "compact-activity")
-        XCTAssertFalse(app.scrollViews["map-details-scroll"].buttons["delete-activity"].exists)
-        XCTAssertFalse(metricIntersectsSheet(app, "Distance"))
-        expandSheet(app, holdBeforeRelease: true)
-        XCTAssertTrue(recordingMetric(app, "Distance").waitForExistence(timeout: 10))
-        XCTAssertTrue(metricIntersectsSheet(app, "Distance"))
-        XCTAssertFalse(app.scrollViews["map-details-scroll"].buttons["delete-activity"].exists)
-        try audit(app, name: "expanded-activity")
-        close.tap()
-        XCTAssertTrue(map.waitForExistence(timeout: 10))
-        app.buttons["close-activity-overview"].tap()
-        XCTAssertTrue(activity.waitForExistence(timeout: 10))
-        app.tabBars.buttons["Profile"].tap()
-        try audit(app, name: "profile")
-    }
-
     func testLargestText() throws {
         let app = launch(category: "UICTContentSizeCategoryAccessibilityXXXL")
         try audit(app, name: "map-accessibility")
@@ -67,24 +36,6 @@ import XCTest
         XCTAssertFalse(app.scrollViews["map-details-scroll"].buttons["delete-activity"].exists)
         app.buttons["close-activity-details"].tap()
         XCTAssertTrue(app.buttons["open-activity-map"].waitForExistence(timeout: 10))
-    }
-
-    func testNativeControlsReference() throws {
-        let app = XCUIApplication()
-        app.launchArguments = ["--ui-testing", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"]
-        app.launchEnvironment["SUNOH_UI_SCENARIO"] = "native-controls"
-        app.launch()
-        XCTAssertTrue(app.navigationBars["Native controls"].waitForExistence(timeout: 10))
-        try audit(app, name: "native-controls-reference")
-    }
-
-    func testNativeSheetReference() throws {
-        let app = XCUIApplication()
-        app.launchArguments = ["--ui-testing", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryL"]
-        app.launchEnvironment["SUNOH_UI_SCENARIO"] = "native-sheet"
-        app.launch()
-        XCTAssertTrue(app.staticTexts["Native sheet title"].waitForExistence(timeout: 10))
-        try audit(app, name: "native-sheet-reference")
     }
 
     func testLiveMapRecordingDetails() throws {
@@ -306,19 +257,6 @@ import XCTest
         reveal(restart, in: app.scrollViews.firstMatch, app: app)
         XCTAssertTrue(restart.isHittable)
         try audit(app, name: "storage-failure-bottom-accessibility")
-    }
-
-    func testLiveSummaryAtLargestText() throws {
-        let app = XCUIApplication()
-        app.launchArguments = ["--ui-testing", "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
-        app.launchEnvironment["SUNOH_UI_SCENARIO"] = "live-summary"
-        app.launch()
-        XCTAssertTrue(app.navigationBars["Native controls"].waitForExistence(timeout: 10))
-        try audit(app, name: "live-summary-accessibility")
-        let emptyCount = app.staticTexts["0 saved points"]
-        for _ in 0..<15 where !emptyCount.isHittable { app.swipeUp() }
-        XCTAssertTrue(emptyCount.isHittable)
-        try audit(app, name: "live-summary-bottom-accessibility")
     }
 
     #if !targetEnvironment(simulator)

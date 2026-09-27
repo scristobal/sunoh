@@ -1,9 +1,9 @@
 import Foundation
 import SwiftData
 
-/// Persisted analysis includes run and lift totals and run records.
-enum ActivitySchemaV4: VersionedSchema {
-    static var versionIdentifier: Schema.Version { Schema.Version(4, 0, 0) }
+/// Storage baseline for controlled, reseedable installations.
+enum ActivitySchemaV0: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(0, 0, 0) }
     static var models: [any PersistentModel.Type] {
         [StoredActivity.self, StoredTrackSegment.self, StoredTrackPoint.self, StoredActivityAnalysis.self]
     }
@@ -99,19 +99,20 @@ enum ActivitySchemaV4: VersionedSchema {
         var maximumElevationMeters: Double?
         var minimumElevationMeters: Double?
         var runCount: Int = 0
-        var liftCount: Int = 0
         var averageDownhillSpeedMetersPerSecond: Double?
         var runDistanceMeters: Double = 0
-        var liftDistanceMeters: Double = 0
         var runDurationMilliseconds: Int64 = 0
-        var liftDurationMilliseconds: Int64 = 0
         var maximumRunSpeedMetersPerSecond: Double?
         var tallestRunHeightMeters: Double?
         var longestRunDistanceMeters: Double?
+        var averageRunSteepnessPercent: Double?
+        var maximumRunSteepnessPercent: Double?
         @Attribute(.externalStorage) var thumbnailPNG: Data?
+        var passagesJSON: Data?
+        var timelineJSON: Data?
         var activity: StoredActivity?
 
-        init(_ result: ActivityAnalysis, activity: StoredActivity) {
+        init(_ result: ActivityAnalysis, activity: StoredActivity) throws {
             activityID = result.activityID.rawValue; self.activity = activity
             sourceRevision = result.sourceRevision; processingVersion = result.processingVersion
             processedAtMilliseconds = result.processedAt.millisecondsSince1970
@@ -122,19 +123,20 @@ enum ActivitySchemaV4: VersionedSchema {
             maximumElevationMeters = result.statistics.maximumElevationMeters
             minimumElevationMeters = result.statistics.minimumElevationMeters
             runCount = result.statistics.runCount
-            liftCount = result.statistics.liftCount
             averageDownhillSpeedMetersPerSecond = result.statistics.averageDownhillSpeedMetersPerSecond
             runDistanceMeters = result.statistics.runDistanceMeters
-            liftDistanceMeters = result.statistics.liftDistanceMeters
             runDurationMilliseconds = result.statistics.runDurationMilliseconds
-            liftDurationMilliseconds = result.statistics.liftDurationMilliseconds
             maximumRunSpeedMetersPerSecond = result.statistics.maximumRunSpeedMetersPerSecond
             tallestRunHeightMeters = result.statistics.tallestRunHeightMeters
             longestRunDistanceMeters = result.statistics.longestRunDistanceMeters
+            averageRunSteepnessPercent = result.statistics.averageRunSteepnessPercent
+            maximumRunSteepnessPercent = result.statistics.maximumRunSteepnessPercent
             thumbnailPNG = result.thumbnailPNG
+            passagesJSON = try result.passages.map { try JSONEncoder().encode($0) }
+            timelineJSON = try result.timeline.map { try JSONEncoder().encode($0) }
         }
 
-        func update(_ result: ActivityAnalysis) {
+        func update(_ result: ActivityAnalysis) throws {
             sourceRevision = result.sourceRevision; processingVersion = result.processingVersion
             processedAtMilliseconds = result.processedAt.millisecondsSince1970
             elapsedDurationMilliseconds = result.statistics.elapsedDurationMilliseconds
@@ -144,16 +146,17 @@ enum ActivitySchemaV4: VersionedSchema {
             maximumElevationMeters = result.statistics.maximumElevationMeters
             minimumElevationMeters = result.statistics.minimumElevationMeters
             runCount = result.statistics.runCount
-            liftCount = result.statistics.liftCount
             averageDownhillSpeedMetersPerSecond = result.statistics.averageDownhillSpeedMetersPerSecond
             runDistanceMeters = result.statistics.runDistanceMeters
-            liftDistanceMeters = result.statistics.liftDistanceMeters
             runDurationMilliseconds = result.statistics.runDurationMilliseconds
-            liftDurationMilliseconds = result.statistics.liftDurationMilliseconds
             maximumRunSpeedMetersPerSecond = result.statistics.maximumRunSpeedMetersPerSecond
             tallestRunHeightMeters = result.statistics.tallestRunHeightMeters
             longestRunDistanceMeters = result.statistics.longestRunDistanceMeters
+            averageRunSteepnessPercent = result.statistics.averageRunSteepnessPercent
+            maximumRunSteepnessPercent = result.statistics.maximumRunSteepnessPercent
             thumbnailPNG = result.thumbnailPNG
+            passagesJSON = try result.passages.map { try JSONEncoder().encode($0) }
+            timelineJSON = try result.timeline.map { try JSONEncoder().encode($0) }
         }
 
         func result() throws -> ActivityAnalysis {
@@ -166,18 +169,26 @@ enum ActivitySchemaV4: VersionedSchema {
             statistics.maximumElevationMeters = maximumElevationMeters
             statistics.minimumElevationMeters = minimumElevationMeters
             statistics.runCount = runCount
-            statistics.liftCount = liftCount
             statistics.averageDownhillSpeedMetersPerSecond = averageDownhillSpeedMetersPerSecond
             statistics.runDistanceMeters = runDistanceMeters
-            statistics.liftDistanceMeters = liftDistanceMeters
             statistics.runDurationMilliseconds = runDurationMilliseconds
-            statistics.liftDurationMilliseconds = liftDurationMilliseconds
             statistics.maximumRunSpeedMetersPerSecond = maximumRunSpeedMetersPerSecond
             statistics.tallestRunHeightMeters = tallestRunHeightMeters
             statistics.longestRunDistanceMeters = longestRunDistanceMeters
+            statistics.averageRunSteepnessPercent = averageRunSteepnessPercent
+            statistics.maximumRunSteepnessPercent = maximumRunSteepnessPercent
+            let passages = try passagesJSON.map { try JSONDecoder().decode(SkiActivityDetector.Result.self, from: $0) }
+            // Skip stale derived payloads so the processor can rebuild them.
+            let timeline = processingVersion == ActivityAnalysis.currentProcessingVersion
+                ? try timelineJSON.map { try JSONDecoder().decode(ActivityTimeline.self, from: $0) } : nil
             return ActivityAnalysis(activityID: ActivityID(rawValue: activityID), sourceRevision: sourceRevision,
                 processingVersion: processingVersion, processedAt: Timestamp(millisecondsSince1970: processedAtMilliseconds),
-                statistics: statistics, thumbnailPNG: thumbnailPNG)
+                statistics: statistics, thumbnailPNG: thumbnailPNG, passages: passages, timeline: timeline)
         }
     }
 }
+
+typealias StoredActivity = ActivitySchemaV0.StoredActivity
+typealias StoredTrackSegment = ActivitySchemaV0.StoredTrackSegment
+typealias StoredTrackPoint = ActivitySchemaV0.StoredTrackPoint
+typealias StoredActivityAnalysis = ActivitySchemaV0.StoredActivityAnalysis

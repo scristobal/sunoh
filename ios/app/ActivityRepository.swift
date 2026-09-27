@@ -28,18 +28,15 @@ protocol ActivityPersistence: Actor {
 
 enum ActivityDatabase {
     static func container(at url: URL) throws -> ModelContainer {
-        let original = try ActivityMigration.prepare(at: url)
-        let schema = Schema(versionedSchema: ActivitySchemaV9.self)
+        let schema = Schema(versionedSchema: ActivitySchemaV0.self)
         let configuration = ModelConfiguration("Activities", schema: schema, url: url, cloudKitDatabase: .none)
-        let container = try ModelContainer(for: schema, migrationPlan: ActivityMigrationPlan.self, configurations: [configuration])
-        try ActivityMigration.verify(original, in: container, at: url)
-        return container
+        return try ModelContainer(for: schema, configurations: [configuration])
     }
 
     static func defaultURL() throws -> URL {
         let support = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
                                                   appropriateFor: nil, create: true)
-        let directory = support.appendingPathComponent("Activities-v1", isDirectory: true)
+        let directory = support.appendingPathComponent("Activities", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory.appendingPathComponent("Activities.store")
     }
@@ -332,23 +329,8 @@ enum ActivityDatabase {
     }
 }
 
-#if DEBUG && targetEnvironment(simulator)
+#if DEBUG
 extension ActivityRepository {
-    func cleanActivities() throws -> Int {
-        if let writeFailure { throw ActivityError.storage(writeFailure) }
-        // A separate context can be discarded on failure without rolling back cascades.
-        let context = ModelContext(modelContainer)
-        context.autosaveEnabled = false
-        do {
-            let activities = try context.fetch(FetchDescriptor<StoredActivity>())
-            for activity in activities { context.delete(activity) }
-            if context.hasChanges { try commit(context) }
-            return activities.count
-        } catch {
-            throw ActivityError.storage(error.localizedDescription)
-        }
-    }
-
     func importSeed(from url: URL) async throws -> GPXImportResult {
         guard url.pathExtension.lowercased() == "gpx" else {
             throw GPXError.invalid("Choose a GPX seed file.")

@@ -1,6 +1,7 @@
 .DS_Store
 .build/
 .local/
+__pycache__/
 Configuration/Maps.local.xcconfig
 Configuration/SkiData.local.xcconfig
 Configuration/.maps-*

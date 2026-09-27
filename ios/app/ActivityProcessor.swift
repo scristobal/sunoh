@@ -32,25 +32,15 @@ actor ActivityProcessor {
             var statistics = ActivityStatistics(activity: input.activity, geometry: geometry)
             let passages = SkiActivityDetector.analyze(geometry, liftFeatures: reference.features)
             statistics.runCount = passages.runCount
-            statistics.liftCount = passages.liftCount
             let ski = Geo.skiStatistics(in: geometry, passages: passages)
             statistics.averageDownhillSpeedMetersPerSecond = ski.averageDownhillSpeedMetersPerSecond
-            statistics.averageLiftSpeedMetersPerSecond = ski.averageLiftSpeedMetersPerSecond
             statistics.runDistanceMeters = ski.runDistanceMeters
-            statistics.liftDistanceMeters = ski.liftDistanceMeters
-            statistics.runElevationLossMeters = ski.runElevationLossMeters
-            statistics.liftElevationGainMeters = ski.liftElevationGainMeters
             statistics.runDurationMilliseconds = ski.runDurationMilliseconds
-            statistics.liftDurationMilliseconds = ski.liftDurationMilliseconds
             statistics.maximumRunSpeedMetersPerSecond = ski.maximumRunSpeedMetersPerSecond
             statistics.tallestRunHeightMeters = ski.tallestRunHeightMeters
             statistics.longestRunDistanceMeters = ski.longestRunDistanceMeters
-            statistics.tallestLiftHeightMeters = ski.tallestLiftHeightMeters
-            statistics.longestLiftDistanceMeters = ski.longestLiftDistanceMeters
             statistics.averageRunSteepnessPercent = ski.averageRunSteepnessPercent
-            statistics.averageLiftSteepnessPercent = ski.averageLiftSteepnessPercent
             statistics.maximumRunSteepnessPercent = ski.maximumRunSteepnessPercent
-            statistics.maximumLiftSteepnessPercent = ski.maximumLiftSteepnessPercent
             var timeline = Geo.timeline(in: geometry, passages: passages)
             if !timeline.entries.isEmpty {
                 timeline.skiMatches = reference.match(geometry: geometry, timeline: timeline)

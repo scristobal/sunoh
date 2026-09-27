@@ -1,13 +1,9 @@
 #if DEBUG
 import Foundation
-import SwiftUI
 
 /// UI tests exercise the real repository in a new temporary directory on every
 /// launch. They never open, seed, migrate or remove the user's activity store.
 enum UITestFixture {
-    static var isReference: Bool {
-        ["native-controls", "native-sheet", "live-summary"].contains(scenario ?? "")
-    }
     static var scenario: String? {
         guard ProcessInfo.processInfo.arguments.contains("--ui-testing") else { return nil }
         return ProcessInfo.processInfo.environment["SUNOH_UI_SCENARIO"] ?? "populated"
@@ -84,31 +80,14 @@ enum UITestFixture {
         let result = try await ActivityProcessor(repository: repository).process(id: activity.id)
         guard var timeline = result.timeline, let points = geometry.sections.first?.points else { return }
         let origin = activity.startedAt.millisecondsSince1970
-        let north = SkiResort(id: "fixture-north", name: "North Peak", sources: [.init(type: "fixture", id: "north")])
         let south = SkiResort(id: "fixture-south", name: "South Bowl", sources: [.init(type: "fixture", id: "south")])
         let group = SkiResort(id: "fixture-group", name: "Valley Pass", sources: [.init(type: "fixture", id: "group")])
-        func feature(_ id: String, kind: ActivityTimelineKind, from: Int64, to: Int64, resorts: [SkiResort]) -> SkiFeature {
-            let coordinates = points.filter { (origin + from * 1_000...origin + to * 1_000).contains($0.timestampMilliseconds) }.map(\.coordinate)
-            return SkiFeature(identity: SkiFeatureIdentity(id: id, kind: kind,
-                sources: [.init(type: "fixture", id: id)], resorts: resorts), coordinates: coordinates)
-        }
-        let features = [
-            feature("fixture-run-1a", kind: .run, from: 20, to: 70, resorts: [north, group]),
-            feature("fixture-run-1b", kind: .run, from: 70, to: 100, resorts: [north, group]),
-            feature("fixture-run-2", kind: .run, from: 100, to: 220, resorts: [south, group]),
-            feature("fixture-lift-1", kind: .lift, from: 220, to: 400, resorts: [south, group])
-        ]
-        timeline.skiMatches = SkiFeatureMatcher.match(geometry: geometry, timeline: timeline, features: features, datasetVersion: "ui-fixture")
-        // Legacy piste results must remain hidden even if a view receives an older snapshot.
-        if let matching = timeline.skiMatches, let firstRun = timeline.entries.first, !matching.entries.isEmpty {
-            var entries = matching.entries
-            entries[0] = features.filter { $0.identity.kind == .run }.map {
-                SkiFeatureMatch(feature: $0.identity, startedAt: firstRun.startedAt,
-                    endedAt: firstRun.endedAt, confidence: 1)
-            }
-            timeline.skiMatches = SkiTimelineMatches(datasetVersion: matching.datasetVersion,
-                entries: entries, resorts: matching.resorts)
-        }
+        let liftPoints = points.filter { (origin + 220_000...origin + 400_000).contains($0.timestampMilliseconds) }
+        let lift = SkiFeature(identity: SkiFeatureIdentity(id: "fixture-lift-1", kind: .lift,
+            sources: [.init(type: "fixture", id: "fixture-lift-1")], resorts: [south, group]),
+            coordinates: liftPoints.map(\.coordinate))
+        timeline.skiMatches = SkiFeatureMatcher.match(geometry: geometry, timeline: timeline,
+            features: [lift], datasetVersion: "ui-fixture")
         try await repository.saveAnalysis(ActivityAnalysis(activityID: activity.id, sourceRevision: activity.sourceRevision,
             processingVersion: ActivityAnalysis.currentProcessingVersion, processedAt: result.processedAt,
             statistics: result.statistics, thumbnailPNG: result.thumbnailPNG, passages: result.passages, timeline: timeline))
@@ -243,37 +222,4 @@ enum UITestFixture {
     }
 }
 
-/// An unmodified native control reference used to distinguish SDK audit failures
-/// from constraints introduced by the app.
-struct NativeControlsAuditView: View {
-    @State private var showSheet = false
-    var body: some View {
-        NavigationStack {
-            Form {
-                if UITestFixture.scenario == "live-summary" {
-                    ForEach([RecordingActivityAttributes.Phase.recording, .paused, .blocked], id: \.self) { phase in
-                        RecordingActivitySummary(state: .init(pointCount: 123_456, phase: phase,
-                                                              startedAt: .now.addingTimeInterval(-360_000), lastPointAt: .now))
-                    }
-                    RecordingActivitySummary(state: .init(pointCount: 0, phase: .recording))
-                } else {
-                    Button {} label: { Label("Import GPX", systemImage: "square.and.arrow.down") }
-                    Button {} label: { Label("Export all", systemImage: "square.and.arrow.up") }
-                }
-            }
-            .navigationTitle("Native controls")
-            .navigationBarTitleDisplayMode(.inline)
-            .onAppear { showSheet = UITestFixture.scenario == "native-sheet" }
-            .sheet(isPresented: $showSheet) {
-                VStack(alignment: .leading) {
-                    Text("Native sheet title").font(.headline)
-                    Text("Native sheet subtitle").font(.subheadline)
-                }
-                .padding()
-                .presentationDetents([.fraction(0.15), .large])
-                .presentationDragIndicator(.visible)
-            }
-        }
-    }
-}
 #endif

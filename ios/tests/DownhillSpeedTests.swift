@@ -8,7 +8,7 @@ struct DownhillSpeedTests {
             GPXSegment(points: [point(0, distance: 0), point(30, distance: 150)]),
             GPXSegment(points: [point(40, distance: 200), point(50, distance: 350)])
         ])
-        let speed = try #require(Geo.averageDownhillSpeedMetersPerSecond(in: geometry, runs: [passage(0, 30), passage(40, 50)]))
+        let speed = try #require(averageSpeed(in: geometry, runs: [passage(0, 30), passage(40, 50)]))
         #expect(abs(speed - 7.5) < 0.000001)
     }
 
@@ -18,7 +18,7 @@ struct DownhillSpeedTests {
             point(70, distance: 260), point(80, distance: 340), point(110, distance: 340),
             point(140, distance: 355), point(150, distance: 435), point(180, distance: 525)
         ]
-        let speed = try #require(Geo.averageDownhillSpeedMetersPerSecond(in: fixtureGeometry([GPXSegment(points: points)]), runs: [passage(60, 150)]))
+        let speed = try #require(averageSpeed(in: fixtureGeometry([GPXSegment(points: points)]), runs: [passage(60, 150)]))
         #expect(abs(speed - 8) < 0.000001)
     }
 
@@ -35,13 +35,13 @@ struct DownhillSpeedTests {
         let passages = SkiActivityDetector.analyze(geometry)
         #expect(passages.runCount == 1)
         #expect(passages.liftCount == 0)
-        let speed = try #require(Geo.averageDownhillSpeedMetersPerSecond(in: geometry, runs: passages.runs))
+        let speed = try #require(averageSpeed(in: geometry, runs: passages.runs))
         #expect(abs(speed - 1_340.0 / 220) < 0.000001)
     }
 
     @Test func clipsObservationIntervalsAtRunBoundaries() throws {
         let points = try [point(0, distance: 0), point(20, distance: 200), point(30, distance: 400)]
-        let speed = try #require(Geo.averageDownhillSpeedMetersPerSecond(in: fixtureGeometry([GPXSegment(points: points)]), runs: [passage(10, 25)]))
+        let speed = try #require(averageSpeed(in: fixtureGeometry([GPXSegment(points: points)]), runs: [passage(10, 25)]))
         #expect(abs(speed - 200.0 / 15) < 0.000001)
     }
 
@@ -50,28 +50,32 @@ struct DownhillSpeedTests {
             GPXSegment(points: [point(0, distance: 0), point(30, distance: 240), point(70, distance: 1_240), point(80, distance: 1_340)]),
             GPXSegment(points: [point(90, distance: 1_540), point(100, distance: 1_640)])
         ])
-        let speed = try #require(Geo.averageDownhillSpeedMetersPerSecond(in: geometry, runs: [passage(0, 100)]))
+        let speed = try #require(averageSpeed(in: geometry, runs: [passage(0, 100)]))
         #expect(abs(speed - 16) < 0.000001)
     }
 
     @Test func excludesImplausibleJumpsFromDistanceAndTime() throws {
         let points = try [point(0, distance: 0), point(10, distance: 80), point(20, distance: 580), point(30, distance: 660)]
-        let speed = try #require(Geo.averageDownhillSpeedMetersPerSecond(in: fixtureGeometry([GPXSegment(points: points)]), runs: [passage(0, 30)]))
+        let speed = try #require(averageSpeed(in: fixtureGeometry([GPXSegment(points: points)]), runs: [passage(0, 30)]))
         #expect(abs(speed - 8) < 0.000001)
     }
 
     @Test func missingElevationWithinARunKeepsObservedMovement() throws {
         let points = try [point(0, distance: 0), point(10, distance: 100, elevation: nil), point(20, distance: 200, elevation: 980)]
-        let speed = try #require(Geo.averageDownhillSpeedMetersPerSecond(in: fixtureGeometry([GPXSegment(points: points)]), runs: [passage(0, 20)]))
+        let speed = try #require(averageSpeed(in: fixtureGeometry([GPXSegment(points: points)]), runs: [passage(0, 20)]))
         #expect(abs(speed - 10) < 0.000001)
     }
 
     @Test func noRunsOrNoUsableMovementHaveNoAverage() throws {
         let points = try [point(0, distance: 0), point(10, distance: 0), point(20, distance: 1_000)]
         let geometry = fixtureGeometry([GPXSegment(points: points)])
-        #expect(Geo.averageDownhillSpeedMetersPerSecond(in: geometry, runs: []) == nil)
-        #expect(Geo.averageDownhillSpeedMetersPerSecond(in: geometry, runs: [passage(0, 20)]) == nil)
-        #expect(Geo.averageDownhillSpeedMetersPerSecond(in: fixtureGeometry([]), runs: [passage(0, 20)]) == nil)
+        #expect(averageSpeed(in: geometry, runs: []) == nil)
+        #expect(averageSpeed(in: geometry, runs: [passage(0, 20)]) == nil)
+        #expect(averageSpeed(in: fixtureGeometry([]), runs: [passage(0, 20)]) == nil)
+    }
+
+    private func averageSpeed(in geometry: TrackGeometry, runs: [SkiActivityDetector.Passage]) -> Double? {
+        Geo.skiStatistics(in: geometry, passages: .init(runs: runs)).averageDownhillSpeedMetersPerSecond
     }
 
     private func point(_ seconds: Int, distance: Double, elevation: Double? = 1_000) throws -> TrackPoint {

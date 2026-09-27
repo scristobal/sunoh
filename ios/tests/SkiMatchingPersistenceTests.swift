@@ -72,41 +72,6 @@ struct SkiMatchingPersistenceTests {
         #expect(result.resorts.isEmpty)
     }
 
-    @Test func previousRunMatchesAndTheirResortsAreRebuiltWithoutChangingRecording() async throws {
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let repository = try await ActivityRepository.open(url: directory.appendingPathComponent("activity.store"))
-        let points = try (0...12).map { index in
-            try TrackPoint(timestampMilliseconds: Int64(index) * 5_000, latitude: 47 + Double(index) * 0.0001,
-                           longitude: 11, elevationMeters: 2_000 - Double(index) * 5)
-        }
-        let track = GPXTrack(segments: [GPXSegment(points: points)])
-        let activity = try #require(try await repository.importTracks([track]).imported.first)
-        let processor = ActivityProcessor(repository: repository)
-        let current = try await processor.process(id: activity.id)
-        var timeline = try #require(current.timeline)
-        let entry = try #require(timeline.entries.first)
-        let resort = SkiResort(id: "run-only-area", name: "Unvalidated Area", sources: [])
-        let feature = SkiFeatureIdentity(id: "old-piste", kind: .run, sources: [], resorts: [resort])
-        timeline.skiMatches = SkiTimelineMatches(datasetVersion: "previous", entries: [[
-            SkiFeatureMatch(feature: feature, startedAt: entry.startedAt, endedAt: entry.endedAt, confidence: 1)
-        ]], resorts: [resort])
-        let previous = ActivityAnalysis(activityID: activity.id, sourceRevision: activity.sourceRevision,
-            processingVersion: 22, processedAt: current.processedAt, statistics: current.statistics,
-            thumbnailPNG: current.thumbnailPNG, passages: current.passages, timeline: timeline)
-        try await repository.saveAnalysis(previous)
-        #expect(!previous.isCurrent(for: activity))
-
-        let rebuilt = try await processor.process(id: activity.id)
-        #expect(rebuilt.isCurrent(for: activity))
-        #expect(rebuilt.timeline?.entries == current.timeline?.entries)
-        #expect(rebuilt.statistics == current.statistics)
-        #expect(rebuilt.timeline?.skiMatches?.entries == [[]])
-        #expect(rebuilt.timeline?.skiMatches?.resorts == [])
-        #expect(try await repository.storedAnalysis(id: activity.id) == rebuilt)
-        #expect(try await repository.recordedTrack(id: activity.id).gpx == track)
-    }
-
     @Test func priorTimelineJSONDecodesWithoutFeatureMatches() throws {
         let data = Data(#"{"entries":[],"breaks":[]}"#.utf8)
         #expect(try JSONDecoder().decode(ActivityTimeline.self, from: data).skiMatches == nil)
@@ -118,32 +83,6 @@ struct SkiMatchingPersistenceTests {
         #expect(previous.datasetVersion == "previous")
         #expect(previous.entries == [[]])
         #expect(try JSONDecoder().decode(SkiTimelineMatches.self, from: JSONEncoder().encode(previous)) == previous)
-    }
-
-    @Test func legacyNamesRatingsAndDistancesAreDiscardedWhileEvidenceAndResortsSurvive() throws {
-        let data = Data(#"{"datasetVersion":"legacy","entries":[[{"feature":{"id":"lift","kind":"lift","name":"Ridge Chair","reference":"7","difficulty":"easy","sources":[{"type":"openstreetmap","id":"way/1"}],"resorts":[{"id":"area","name":"North Peak","sources":[]}]},"startedAt":{"millisecondsSince1970":0},"endedAt":{"millisecondsSince1970":10000},"confidence":0.8,"distanceMeters":123.45}]],"resorts":[{"id":"area","name":"North Peak","sources":[]}],"coverage":[{"matchedDistanceMeters":123.45,"totalDistanceMeters":200}]}"#.utf8)
-        let previous = try JSONDecoder().decode(SkiTimelineMatches.self, from: data)
-        let match = try #require(previous.entries.first?.first)
-        #expect(match.feature.id == "lift")
-        #expect(match.feature.kind == .lift)
-        #expect(match.feature.sources == [SkiFeatureSource(type: "openstreetmap", id: "way/1")])
-        #expect(match.startedAt == 0)
-        #expect(match.endedAt == 10_000)
-        #expect(match.confidence == 0.8)
-        #expect(match.feature.resorts == previous.resorts)
-        #expect(previous.resorts.first?.displayName == "North Peak")
-
-        let encoded = try JSONEncoder().encode(previous)
-        #expect(try JSONDecoder().decode(SkiTimelineMatches.self, from: encoded) == previous)
-        let object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
-        #expect(object["coverage"] == nil)
-        let entries = try #require(object["entries"] as? [[[String: Any]]])
-        let storedMatch = try #require(entries.first?.first)
-        #expect(storedMatch["distanceMeters"] == nil)
-        let feature = try #require(storedMatch["feature"] as? [String: Any])
-        #expect(feature["name"] == nil)
-        #expect(feature["reference"] == nil)
-        #expect(feature["difficulty"] == nil)
     }
 
     @Test func bundledPackagesResolveARealAustrianLiftAndItsSkiAreas() throws {

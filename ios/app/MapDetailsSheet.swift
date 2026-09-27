@@ -3,7 +3,6 @@ import SwiftUI
 /// Native sheet sizing follows the header's laid-out height, including text
 /// wrapping and Dynamic Type. SwiftUI owns the safe areas and drag interaction.
 struct MapDetailsSheet<Header: View, Details: View>: View {
-    var pinsHeader = false
     @ViewBuilder let header: () -> Header
     @ViewBuilder let details: () -> Details
     @State private var selection: PresentationDetent = .large
@@ -26,15 +25,9 @@ struct MapDetailsSheet<Header: View, Details: View>: View {
     var body: some View {
         // The compact detent fits the padded header without extra stack spacing.
         VStack(spacing: 0) {
-            if pinsHeader {
-                measuredHeader
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(uiColor: .systemBackground))
-            }
-
             ScrollView {
                 VStack {
-                    if !pinsHeader { measuredHeader }
+                    measuredHeader
 
                     details()
                         .frame(maxWidth: .infinity, alignment: .leading)
