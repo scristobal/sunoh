@@ -40,7 +40,7 @@ class SkiDataTests(unittest.TestCase):
                 extra = ', uses TEXT' if table == 'runs_linestring' else ''
                 connection.execute(f'CREATE TABLE {table} (id INTEGER PRIMARY KEY, geometry BLOB, ' + ', '.join(f'{name} TEXT' for name in attributes) + extra + ')')
                 connection.execute('INSERT INTO gpkg_contents VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (table, 'features', table, '', self.updated, -999, -999, 999, 999, 4326))
-                values = {'feature_id': 'resort' if table == 'ski_areas_point' else table, 'ski_area_ids': 'resort', 'name': None, 'difficulty': 'intermediate', 'ref': '12', 'sources': '[{"type":"openstreetmap","id":"way/123"}]', 'wikidata_id': 'Q123', 'spot_type': 'lift_station'}
+                values = {'feature_id': 'resort' if table == 'ski_areas_point' else table, 'ski_area_ids': 'resort', 'name': None, 'difficulty': 'intermediate', 'ref': '12', 'sources': '[{"type":"openstreetmap","id":"way/123"}]', 'wikidata_id': 'Q123'}
                 row = [1, self.line if kind == 'LINESTRING' else self.point] + [values[name] for name in attributes]
                 if table == 'runs_linestring':
                     row.append('nordic,downhill')
@@ -53,7 +53,7 @@ class SkiDataTests(unittest.TestCase):
         result = ski_data.build(self.source, self.output, compress=True)
         self.assertEqual(self.source.read_bytes(), source_before)
         self.assertEqual(result['dataset_version'], hashlib.sha256(source_before).hexdigest())
-        self.assertEqual([item['features'] for item in result['packages']], [1, 1, 1, 1])
+        self.assertEqual([item['features'] for item in result['packages']], [1, 1, 1])
         for name, table, _, attributes in ski_data.LAYERS:
             path = self.output / f'{name}.gpkg'
             with closing(ski_data.readonly(path)) as connection:
@@ -97,7 +97,7 @@ class SkiDataTests(unittest.TestCase):
             self.assertEqual(path.read_bytes(), (other / path.name).read_bytes())
         with self.assertRaisesRegex(ValueError, 'already exists'):
             ski_data.build(self.source, self.output)
-        self.assertEqual(len(list(self.output.iterdir())), 8)
+        self.assertEqual(len(list(self.output.iterdir())), 6)
 
 
 if __name__ == '__main__':

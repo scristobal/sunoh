@@ -17,7 +17,7 @@ import zipfile
 
 SEASON_START = date(2025, 7, 1)
 SEASON_END = date(2026, 7, 1)
-DEFAULT_SOURCE = Path('/Volumes/Downloads/sunoh/exports/slopes-21-09-2026')
+DEFAULT_SOURCE = Path(__file__).resolve().parents[1] / '.local/sources/slopes-2025-2026'
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / '.local/seed/slopes-2025-2026'
 EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 

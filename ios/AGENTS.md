@@ -32,7 +32,7 @@
 - Preserve existing recordings during data exchange and keep history responsive as it grows. Detailed import and export behavior belongs in executable checks.
 - Use GPX as the external format for development track seeds. Keep app-specific storage fields out of seed files.
 - Always seed simulators and development installations from the original Slopes exports for the 2025/2026 season, defined as July 1, 2025 through June 30, 2026, unless the user explicitly requests another source or season. Preserve raw observations and let Sunō derive activity analysis.
-- Keep original seed archives outside the repository. Use the ignored local seed directory only for disposable GPX files generated from those archives and their verification manifest; never fall back to another dataset or an unverified cache.
+- Keep original development data in ignored local storage so development workflows do not require an external volume. Keep original seed archives separate from disposable generated GPX files and their verification manifest; never fall back to another dataset or an unverified cache.
 
 ## Interaction and accessibility
 
@@ -47,7 +47,7 @@
 
 ## Map access and privacy
 
-- Keep development credentials and private recordings out of version control. Large offline map data also belongs outside the source repository.
+- Keep development credentials, private recordings and large offline map data out of version control.
 - Keep infrastructure management and publication credentials out of the app. Send map-access credentials only to the intended secure service, including after redirects, and never expose them through diagnostics.
 - Use Mapbox for map rendering and delivery. Keep the selected style configurable.
 - Use a public Mapbox access token in the app.

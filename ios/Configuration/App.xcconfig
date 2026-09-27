@@ -1,4 +1,4 @@
 #include "Maps.xcconfig"
 
-SUNOH_SKI_DATA_DIRECTORY = $(HOME)/Library/Application Support/Sunoh/SkiData
+SUNOH_SKI_DATA_DIRECTORY = $(SRCROOT)/.local/ski-data
 #include? "SkiData.local.xcconfig"

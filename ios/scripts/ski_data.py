@@ -18,7 +18,6 @@ LAYERS = (
     ('runs', 'runs_linestring', 'LINESTRING', ('feature_id', 'ski_area_ids', 'name', 'difficulty', 'ref', 'sources')),
     ('lifts', 'lifts_linestring', 'LINESTRING', ('feature_id', 'ski_area_ids', 'name', 'ref', 'sources')),
     ('ski_areas', 'ski_areas_point', 'POINT', ('feature_id', 'name', 'sources', 'wikidata_id')),
-    ('spots', 'spots_point', 'POINT', ('feature_id', 'ski_area_ids', 'spot_type', 'sources')),
 )
 DOWNHILL_FILTER = "WHERE instr(',' || coalesce(uses, '') || ',', ',downhill,') > 0"
 SCHEMA = """
@@ -218,8 +217,9 @@ def compress_package(destination):
 def build(source_path, output_path, compress=False):
     source_path, output_path = source_path.resolve(), output_path.resolve()
     repository = Path(__file__).resolve().parents[2]
-    if output_path.is_relative_to(repository):
-        raise ValueError('Store large ski-feature packages outside the source repository')
+    local = Path(__file__).resolve().parents[1] / '.local'
+    if output_path.is_relative_to(repository) and not output_path.is_relative_to(local.resolve()):
+        raise ValueError('Store ski-feature packages under ios/.local or outside the repository')
     if output_path.exists():
         raise ValueError(f'Output already exists: {output_path}')
     initial_stat = source_path.stat()
@@ -254,7 +254,7 @@ def build(source_path, output_path, compress=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('source', type=Path, help='Original OpenSkiData GeoPackage; opened read-only')
-    parser.add_argument('output', type=Path, help='New directory outside the repository; existing data is never overwritten')
+    parser.add_argument('output', type=Path, help='New directory under ios/.local or outside the repository; existing data is never overwritten')
     parser.add_argument('--zip', action='store_true', help='Also create a ZIP archive for each package with Deflate level 9')
     args = parser.parse_args()
     try:

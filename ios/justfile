@@ -8,7 +8,7 @@ SCHEME := "Sunoh"
 BUNDLE_ID := "com.samuel.sunoh"
 DERIVED := justfile_directory() / ".build"
 APP := DERIVED / "Build/Products/Debug-iphonesimulator/Sunoh.app"
-SLOPES_EXPORT := env("SLOPES_EXPORT", "/Volumes/Downloads/sunoh/exports/slopes-21-09-2026")
+SLOPES_EXPORT := env("SLOPES_EXPORT", justfile_directory() / ".local/sources/slopes-2025-2026")
 SEED_ROOT := justfile_directory() / ".local/seed/slopes-2025-2026"
 PHONE_UDID := `printenv PHONE_UDID || xcrun simctl list devices available -j | python3 scripts/simulator.py`
 
@@ -41,7 +41,7 @@ test *args: phone
 gps: phone
     python3 scripts/gps.py DebugRoute.gpx | xcrun simctl location {{ quote(PHONE_UDID) }} start --speed=5 -
 
-# Create the offline ski-feature packages outside the repository.
+# Create offline ski-feature packages in ignored local storage or an external directory.
 ski-data source output:
     python3 scripts/ski_data.py "$1" "$2" --zip
 
