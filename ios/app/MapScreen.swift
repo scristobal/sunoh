@@ -58,9 +58,11 @@ private struct FullScreenLiveMap: View {
                                 identifier: "close-live-map", action: { dismiss() })
                 .padding()
         }
-        .onAppear { showDetails = true }
+        .onChange(of: recorder.currentActivity != nil, initial: true) { _, hasActivity in
+            showDetails = hasActivity
+        }
         .sheet(isPresented: $showDetails) {
-            MapDetailsSheet {
+            MapDetailsSheet(hasDetails: recorder.currentActivity != nil) {
                 LiveMapSheetHeader(
                     status: recorder.recordingStatus.withLocationReadiness(tracker.isLocationReady),
                     recorder: recorder
@@ -80,32 +82,29 @@ private struct LiveMapSheetHeader: View {
     var body: some View {
         ViewThatFits(in: .horizontal) {
             HStack {
-                statusIcon
-                summary.fixedSize()
+                summary
             }
             .fixedSize()
 
             VStack {
-                HStack {
-                    statusIcon
-                    Spacer()
-                }
                 summary
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .font(.title3.weight(.medium))
+        .monospacedDigit()
+        .frame(maxWidth: .infinity)
     }
 
-    private var statusIcon: some View {
-        RecordingStatusIcon(status: status)
-            .accessibilityIdentifier("live-recording-status")
-    }
-
+    @ViewBuilder
     private var summary: some View {
-        StatisticsGrid(metrics: [
-            .init(label: "Elapsed time", value: elapsed),
-            .init(label: "Saved points", value: recorder.pointCount.formatted())
-        ], maximumColumns: 2)
+        if recorder.currentActivity != nil {
+            RecordingStatusIcon(status: status)
+                .accessibilityIdentifier("live-recording-status")
+            Text(elapsed)
+                .accessibilityLabel("Duration")
+                .accessibilityValue(elapsed)
+                .accessibilityIdentifier("live-duration")
+        }
     }
 
     private var elapsed: String {
@@ -120,23 +119,44 @@ private struct LiveMapRecordingDetails: View {
     let recorder: RecordingController
 
     var body: some View {
-        StatisticsGrid(metrics: metrics, maximumColumns: 2)
+        ViewThatFits(in: .horizontal) {
+            HStack {
+                metrics
+            }
+            .fixedSize()
+
+            VStack {
+                metrics
+            }
+        }
+        .font(.subheadline.weight(.medium))
+        .monospacedDigit()
+        .frame(maxWidth: .infinity)
     }
 
-    private var metrics: [StatisticsGrid.Metric] {
+    private var statistics: ActivityStatistics? {
         let activity = recorder.currentActivity
         let geometry = recorder.geometryValue.flatMap { $0.activityID == activity?.id ? $0 : nil }
-        let statistics = activity.flatMap { activity in
+        return activity.flatMap { activity in
             geometry.map { ActivityStatistics(activity: activity, geometry: $0) }
         }
-        let currentElevation = geometry?.sections.last?.points.last?.elevationMeters
+    }
+
+    @ViewBuilder
+    private var metrics: some View {
+        let statistics = statistics
         let hasElevation = statistics?.maximumElevationMeters != nil
-        return [
-            .init(label: "Distance", value: statistics?.formattedDistance ?? "—"),
-            .init(label: "Current elevation", value: elevation(currentElevation)),
-            .init(label: "Ascent", value: elevation(hasElevation ? statistics?.elevationGainMeters : nil)),
-            .init(label: "Descent", value: elevation(hasElevation ? statistics?.elevationLossMeters : nil))
-        ]
+        metric("Distance", symbol: "arrow.left.and.right", value: statistics?.formattedDistance ?? "—")
+        metric("Ascent", symbol: "arrow.up", value: elevation(hasElevation ? statistics?.elevationGainMeters : nil))
+        metric("Descent", symbol: "arrow.down", value: elevation(hasElevation ? statistics?.elevationLossMeters : nil))
+    }
+
+    private func metric(_ label: String, symbol: String, value: String) -> some View {
+        Label(value, systemImage: symbol)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(label)
+            .accessibilityValue(value)
+            .accessibilityIdentifier("live-\(label.lowercased())")
     }
 
     private func elevation(_ meters: Double?) -> String {

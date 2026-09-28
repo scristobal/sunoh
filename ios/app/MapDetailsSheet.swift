@@ -1,14 +1,14 @@
 import SwiftUI
 
-/// Native sheet sizing follows the header's laid-out height, including text
-/// wrapping and Dynamic Type. SwiftUI owns the safe areas and drag interaction.
+/// Both native sheet positions fit their content. SwiftUI owns safe areas and dragging.
 struct MapDetailsSheet<Header: View, Details: View>: View {
+    let hasDetails: Bool
     @ViewBuilder let header: () -> Header
     @ViewBuilder let details: () -> Details
     @State private var selection: PresentationDetent = .large
     @State private var headerHeight: CGFloat?
+    @State private var contentHeight: CGFloat?
     @State private var scrollPosition = ScrollPosition(edge: .top)
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private var isCompact: Bool {
         headerHeight.map { selection == .height($0) } ?? true
@@ -16,10 +16,8 @@ struct MapDetailsSheet<Header: View, Details: View>: View {
 
     private var detents: Set<PresentationDetent> {
         guard let headerHeight else { return [.large] }
-        // A half-height stop can be shorter than the header at accessibility
-        // sizes. Keep the fitted header and full-height reading states instead.
-        if dynamicTypeSize.isAccessibilitySize { return [.height(headerHeight), .large] }
-        return [.height(headerHeight), .medium, .large]
+        guard hasDetails, let contentHeight else { return [.height(headerHeight)] }
+        return [.height(headerHeight), .height(max(headerHeight, contentHeight))]
     }
 
     var body: some View {
@@ -29,10 +27,18 @@ struct MapDetailsSheet<Header: View, Details: View>: View {
                 VStack {
                     measuredHeader
 
-                    details()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
-                        .accessibilityHidden(isCompact)
+                    if hasDetails {
+                        details()
+                            .frame(maxWidth: .infinity)
+                            .padding([.horizontal, .bottom])
+                            .accessibilityHidden(isCompact)
+                    }
+                }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                    guard height > 0, height != contentHeight else { return }
+                    let keepExpanded = !isCompact
+                    contentHeight = height
+                    if keepExpanded, hasDetails { selection = .height(height) }
                 }
             }
             .scrollPosition($scrollPosition)
@@ -43,15 +49,15 @@ struct MapDetailsSheet<Header: View, Details: View>: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("map-details-sheet")
         .presentationDetents(detents, selection: $selection)
-        .presentationDragIndicator(.visible)
+        .presentationDragIndicator(hasDetails ? .visible : .hidden)
         .presentationBackgroundInteraction(.enabled)
         .presentationContentInteraction(.resizes)
         .interactiveDismissDisabled()
         .onChange(of: isCompact) {
             if isCompact { scrollPosition.scrollTo(edge: .top) }
         }
-        .onChange(of: dynamicTypeSize) {
-            if dynamicTypeSize.isAccessibilitySize, selection == .medium { selection = .large }
+        .onChange(of: hasDetails) {
+            if !hasDetails, let headerHeight { selection = .height(headerHeight) }
         }
     }
 

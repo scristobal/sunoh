@@ -16,59 +16,42 @@ struct MainView: View {
     @State private var showLocationAccessAlert = false
     @State private var showSaveDecision = false
 
-    private var isSaving: Bool {
-        recorder.recordingStatus == .working(.saving)
-    }
-
     var body: some View {
-        ZStack {
-            tabs
-                .disabled(isSaving)
-                .allowsHitTesting(!isSaving)
-
-            if isSaving {
-                ProgressView("Saving…")
-                    .controlSize(.large)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(.background)
-                    .contentShape(.rect)
-                    .accessibilityIdentifier("saving-progress")
+        tabs
+            .onChange(of: selectedTab, initial: true) {
+                if selectedTab == .map { requestMapLocationAccess() }
             }
-        }
-        .onChange(of: selectedTab, initial: true) {
-            if selectedTab == .map { requestMapLocationAccess() }
-        }
-        .onChange(of: recorder.needsSaveDecision, initial: true) {
-            showSaveDecision = recorder.needsSaveDecision
-        }
-        .alert("Save this recording?", isPresented: $showSaveDecision) {
-            Button("Save", role: .cancel) { Task { await recorder.finishRecording() } }
-            Button("Discard", role: .destructive) { Task { await recorder.discardRecording() } }
-        } message: {
-            Text("This recording has fewer than 10 points or lasted less than 1 minute. You can save it or discard it.")
-        }
-        .alert("Location access needed", isPresented: $showLocationAccessAlert) {
-            if tracker.authorizationStatus == .denied {
-                Button("Open Sunō Settings") {
-                    if let url = URL(string: UIApplication.openSettingsURLString) {
-                        openURL(url)
+            .onChange(of: recorder.needsSaveDecision, initial: true) {
+                showSaveDecision = recorder.needsSaveDecision
+            }
+            .alert("Save this recording?", isPresented: $showSaveDecision) {
+                Button("Save", role: .cancel) { Task { await recorder.finishRecording() } }
+                Button("Discard", role: .destructive) { Task { await recorder.discardRecording() } }
+            } message: {
+                Text("This recording has fewer than 10 points or lasted less than 1 minute. You can save it or discard it.")
+            }
+            .alert("Location access needed", isPresented: $showLocationAccessAlert) {
+                if tracker.authorizationStatus == .denied {
+                    Button("Open Sunō Settings") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            openURL(url)
+                        }
                     }
+                    Button("Not Now", role: .cancel) {}
+                } else {
+                    Button("OK", role: .cancel) {}
                 }
-                Button("Not Now", role: .cancel) {}
-            } else {
-                Button("OK", role: .cancel) {}
+            } message: {
+                if tracker.authorizationStatus == .restricted {
+                    Text("Location access is restricted on this device. Check Screen Time or device management restrictions.")
+                } else {
+                    Text("Allow location access in Settings → Apps → Sunō → Location. Select While Using the App.")
+                }
             }
-        } message: {
-            if tracker.authorizationStatus == .restricted {
-                Text("Location access is restricted on this device. Check Screen Time or device management restrictions.")
-            } else {
-                Text("Allow location access in Settings → Apps → Sunō → Location. Select While Using the App.")
+            .onOpenURL { url in
+                guard url.scheme == "sunoh", url.host == "explore" else { return }
+                selectedTab = .map
             }
-        }
-        .onOpenURL { url in
-            guard !isSaving, url.scheme == "sunoh", url.host == "explore" else { return }
-            selectedTab = .map
-        }
     }
 
     private func requestMapLocationAccess() {

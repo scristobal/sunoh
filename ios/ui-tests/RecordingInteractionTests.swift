@@ -3,6 +3,29 @@ import XCTest
 @MainActor final class RecordingInteractionTests: XCTestCase {
     override func setUp() { continueAfterFailure = false }
 
+    func testTappingKnobReturnsToNormalSizeWithoutChangingRecording() {
+        for recording in [false, true] {
+            let app = launch(scenario: recording ? "recording" : "empty")
+            let slider = slider(in: app)
+            waitForRecording(recording, in: app)
+            let originalFrame = slider.frame
+            let knob = slider.coordinate(withNormalizedOffset: CGVector(dx: recording ? 0.93 : 0.07, dy: 0.5))
+
+            for duration in [0.05, 0.75] {
+                knob.press(forDuration: duration)
+                let returnedToNormalSize = NSPredicate { _, _ in
+                    abs(slider.frame.width - originalFrame.width) <= 1
+                        && abs(slider.frame.height - originalFrame.height) <= 1
+                }
+                XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: returnedToNormalSize, object: app)], timeout: 3), .completed)
+                waitForRecording(recording, in: app)
+                XCTAssertFalse(app.alerts["Save this recording?"].exists)
+                capture(app, name: "Knob released without moving while \(recording ? "recording" : "ready")")
+            }
+            app.terminate()
+        }
+    }
+
     func testSliderExplainsWhyRecordingCannotStart() {
         let cases = [
             (scenario: "empty", location: "waiting", message: "Waiting for location"),
@@ -67,12 +90,12 @@ import XCTest
         XCTAssertFalse(decision.buttons["Cancel"].exists)
         capture(app, name: "Short recording save or discard")
         decision.buttons["Save"].tap()
-        let saving = app.descendants(matching: .any).matching(identifier: "saving-progress").firstMatch
-        XCTAssertTrue(saving.waitForExistence(timeout: 5))
-        capture(app, name: "Saving stopped recording")
-        waitForRecording(false, in: app)
+        XCTAssertTrue(app.buttons["open-live-map"].exists)
+        capture(app, name: "Map remains visible after saving")
         app.tabBars.buttons["Activities"].tap()
         XCTAssertEqual(activityRows(in: app).count, 4)
+        app.tabBars.buttons["Map"].tap()
+        waitForRecording(false, in: app)
     }
 
     func testShortRecordingCanBeDiscarded() {
@@ -104,8 +127,6 @@ import XCTest
         app.buttons["close-live-map"].tap()
         waitForRecording(true, in: app)
         drag(slider, start: false)
-        let saving = app.descendants(matching: .any).matching(identifier: "saving-progress").firstMatch
-        XCTAssertTrue(saving.waitForExistence(timeout: 5))
         XCTAssertFalse(app.alerts["Save this recording?"].exists)
         waitForRecording(false, in: app)
         XCTAssertEqual(slider.frame.width, originalFrame.width, accuracy: 1)
@@ -123,6 +144,70 @@ import XCTest
         waitForRecording(false, in: app)
         app.tabBars.buttons["Activities"].tap()
         XCTAssertEqual(activityRows(in: app).count, 4)
+    }
+
+    func testLiveMapSheetFitsRecordingMetricsAndHidesAfterSaving() {
+        let app = launch(scenario: "long-recording")
+        waitForRecording(true, in: app)
+        app.buttons["open-live-map"].tap()
+        XCTAssertTrue(app.buttons["close-live-map"].waitForExistence(timeout: 10))
+        let icon = liveMetric("recording-status", in: app)
+        let duration = liveMetric("duration", in: app)
+        XCTAssertTrue(duration.waitForExistence(timeout: 10))
+        XCTAssertTrue(icon.exists)
+        XCTAssertFalse(liveMetric("elevation", in: app).exists)
+        XCTAssertFalse(app.staticTexts["Elapsed time"].exists)
+        XCTAssertFalse(app.staticTexts["Saved points"].exists)
+        let scroll = app.descendants(matching: .any).matching(identifier: "map-details-sheet").firstMatch
+        let collapsedFrame = scroll.frame
+        let summaryFrame = icon.frame.union(duration.frame)
+        XCTAssertEqual(summaryFrame.midX, collapsedFrame.midX, accuracy: 1)
+        for metric in ["distance", "ascent", "descent"] {
+            XCTAssertFalse(liveMetric(metric, in: app).exists)
+        }
+        capture(app, name: "Collapsed recording icon and duration")
+
+        app.buttons.matching(identifier: "Sheet Grabber").allElementsBoundByIndex.last!.swipeUp()
+        XCTAssertTrue(liveMetric("distance", in: app).waitForExistence(timeout: 10))
+        let expandedFrame = scroll.frame
+        XCTAssertGreaterThan(expandedFrame.height, collapsedFrame.height)
+        XCTAssertLessThan(expandedFrame.height, app.frame.height * 0.4)
+        for metric in ["distance", "ascent", "descent"] {
+            let field = liveMetric(metric, in: app)
+            XCTAssertTrue(field.exists)
+            XCTAssertTrue(expandedFrame.contains(field.frame))
+            XCTAssertNotEqual(field.value as? String, "—")
+        }
+        capture(app, name: "Expanded distance ascent and descent")
+
+        app.buttons.matching(identifier: "Sheet Grabber").allElementsBoundByIndex.last!.swipeDown()
+        let collapsed = NSPredicate { _, _ in abs(scroll.frame.height - collapsedFrame.height) <= 1 }
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: collapsed, object: app)], timeout: 5), .completed)
+        app.buttons["close-live-map"].tap()
+        drag(slider(in: app), start: false)
+        waitForRecording(false, in: app)
+        app.buttons["open-live-map"].tap()
+        XCTAssertTrue(app.buttons["close-live-map"].waitForExistence(timeout: 10))
+        XCTAssertFalse(scroll.exists)
+        XCTAssertFalse(liveMetric("elevation", in: app).exists)
+        XCTAssertFalse(duration.exists)
+        XCTAssertFalse(icon.exists)
+        XCTAssertFalse(liveMetric("distance", in: app).exists)
+        capture(app, name: "Live map without a recording")
+    }
+
+    func testIdleLiveMapHasNoDetailsSheetWhenLocationIsUnavailable() {
+        let app = launch(scenario: "empty", location: "waiting")
+        app.buttons["open-live-map"].tap()
+        XCTAssertTrue(app.buttons["close-live-map"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "map-details-sheet").firstMatch.exists)
+        XCTAssertFalse(liveMetric("elevation", in: app).exists)
+        XCTAssertFalse(liveMetric("duration", in: app).exists)
+        capture(app, name: "Idle live map waiting for location")
+    }
+
+    private func liveMetric(_ name: String, in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(identifier: "live-\(name)").firstMatch
     }
 
     private func launch(scenario: String, location: String = "ready") -> XCUIApplication {
@@ -147,7 +232,8 @@ import XCTest
         let from = start ? 0.07 : 0.93
         let to = complete ? 1 - from : 0.5
         slider.coordinate(withNormalizedOffset: CGVector(dx: from, dy: 0.5))
-            .press(forDuration: 0.1, thenDragTo: slider.coordinate(withNormalizedOffset: CGVector(dx: to, dy: 0.5)))
+            .press(forDuration: complete ? 0.1 : 1,
+                   thenDragTo: slider.coordinate(withNormalizedOffset: CGVector(dx: to, dy: 0.5)))
     }
 
     private func waitForRecording(_ recording: Bool, in app: XCUIApplication) {

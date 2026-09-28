@@ -39,22 +39,20 @@ import XCTest
     }
 
     func testLiveMapRecordingDetails() throws {
-        let app = launch(scenario: "recording")
+        let app = launch(scenario: "recording", location: "ready")
         assertMapStatus(app, status: "Recording")
         app.buttons["open-live-map"].tap()
         XCTAssertTrue(app.buttons["close-live-map"].waitForExistence(timeout: 10))
         assertCollapsedRecordingDetails(app, status: "Recording")
-        let collapsedHeight = app.scrollViews["map-details-scroll"].frame.height
+        let collapsedHeight = recordingSheet(app).frame.height
         try audit(app, name: "compact-live-map")
         expandSheet(app)
         assertRecordingDetails(app)
-        XCTAssertNotEqual(recordingMetric(app, "Current elevation").value as? String, "—")
-        XCTAssertGreaterThanOrEqual(Int(recordingMetric(app, "Saved points").value as? String ?? "") ?? 0, 1)
-        XCTAssertGreaterThan(app.scrollViews["map-details-scroll"].frame.height, collapsedHeight)
+        XCTAssertGreaterThan(recordingSheet(app).frame.height, collapsedHeight)
         try audit(app, name: "expanded-live-map")
         collapseRecordingSheet(app, to: collapsedHeight)
         assertCollapsedRecordingDetails(app, status: "Recording")
-        XCTAssertEqual(app.scrollViews["map-details-scroll"].frame.height, collapsedHeight, accuracy: 1)
+        XCTAssertEqual(recordingSheet(app).frame.height, collapsedHeight, accuracy: 1)
         app.buttons["close-live-map"].tap()
         slideToStop(app)
         app.alerts["Save this recording?"].buttons["Save"].tap()
@@ -63,12 +61,7 @@ import XCTest
         app.buttons["open-live-map"].tap()
         XCTAssertTrue(app.buttons["close-live-map"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.staticTexts["Current recording"].exists)
-        expandSheet(app)
-        assertRecordingDetails(app)
-        for label in ["Elapsed time", "Distance", "Current elevation", "Ascent", "Descent"] {
-            XCTAssertEqual(recordingMetric(app, label).value as? String, "—")
-        }
-        XCTAssertEqual(recordingMetric(app, "Saved points").value as? String, "0")
+        XCTAssertFalse(recordingSheet(app).exists)
         try audit(app, name: "ready-live-map-details")
         app.buttons["close-live-map"].tap()
         XCTAssertTrue(app.buttons["open-live-map"].waitForExistence(timeout: 10))
@@ -89,7 +82,7 @@ import XCTest
             if status == "Recording" { return slider.label == "Slide to stop recording" }
             if status == "Recording unavailable" { return slider.label == "Storage unavailable" }
             return slider.value as? String == "Stopped"
-                && !app.descendants(matching: .any).matching(identifier: "saving-progress").firstMatch.exists
+                && slider.label != "Saving"
         }
         XCTAssertTrue(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: matchesState, object: app)],
                                     timeout: 10) == .completed, file: file, line: line)
@@ -97,8 +90,8 @@ import XCTest
 
     private func assertRecordingDetails(_ app: XCUIApplication,
                                         file: StaticString = #filePath, line: UInt = #line) {
-        let viewport = app.scrollViews["map-details-scroll"].frame.intersection(app.frame)
-        for label in ["Elapsed time", "Distance", "Current elevation", "Ascent", "Descent", "Saved points"] {
+        let viewport = recordingSheet(app).frame.intersection(app.frame)
+        for label in ["Duration", "Distance", "Ascent", "Descent"] {
             let metric = recordingMetric(app, label)
             XCTAssertTrue(metric.waitForExistence(timeout: 10), file: file, line: line)
             XCTAssertTrue(metric.isHittable && viewport.contains(metric.frame), "The sheet must contain the entire metric: \(label)", file: file, line: line)
@@ -115,13 +108,11 @@ import XCTest
         let icon = app.descendants(matching: .any).matching(identifier: "live-recording-status").firstMatch
         XCTAssertTrue(icon.isHittable, file: file, line: line)
         XCTAssertEqual(icon.label, status, file: file, line: line)
-        let viewport = app.scrollViews["map-details-scroll"].frame.intersection(app.frame)
-        for label in ["Elapsed time", "Saved points"] {
-            let metric = recordingMetric(app, label)
-            XCTAssertTrue(metric.waitForExistence(timeout: 10), file: file, line: line)
-            XCTAssertTrue(metric.isHittable && viewport.contains(metric.frame), "The collapsed sheet must contain the entire metric: \(label)", file: file, line: line)
-        }
-        for metric in ["Distance", "Current elevation", "Ascent", "Descent"] {
+        let viewport = recordingSheet(app).frame.intersection(app.frame)
+        let duration = recordingMetric(app, "Duration")
+        XCTAssertTrue(duration.waitForExistence(timeout: 10), file: file, line: line)
+        XCTAssertTrue(duration.isHittable && viewport.contains(duration.frame), "The collapsed sheet must contain the entire duration", file: file, line: line)
+        for metric in ["Distance", "Ascent", "Descent"] {
             XCTAssertFalse(metricIntersectsSheet(app, metric), "The collapsed sheet must hide the metric below its viewport: \(metric)", file: file, line: line)
         }
         for identifier in ["recording-slider"] {
@@ -131,14 +122,18 @@ import XCTest
     }
 
     private func recordingMetric(_ app: XCUIApplication, _ label: String) -> XCUIElement {
-        app.scrollViews["map-details-scroll"].staticTexts
+        recordingSheet(app).staticTexts
             .matching(NSPredicate(format: "label == %@ AND value != nil", label)).firstMatch
+    }
+
+    private func recordingSheet(_ app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(identifier: "map-details-sheet").firstMatch
     }
 
     private func metricIntersectsSheet(_ app: XCUIApplication, _ label: String) -> Bool {
         let metric = recordingMetric(app, label)
         guard metric.exists, metric.isHittable else { return false }
-        let viewport = app.scrollViews["map-details-scroll"].frame.intersection(app.frame)
+        let viewport = recordingSheet(app).frame.intersection(app.frame)
         let visibleFrame = viewport.intersection(metric.frame)
         return !visibleFrame.isNull && !visibleFrame.isEmpty
     }
@@ -279,10 +274,10 @@ import XCTest
         XCTAssertTrue(app.buttons["close-live-map"].waitForExistence(timeout: 10))
         assertCollapsedRecordingDetails(app, status: "Recording")
         try audit(app, name: "recording-compact-accessibility")
-        let collapsedHeight = app.scrollViews["map-details-scroll"].frame.height
+        let collapsedHeight = recordingSheet(app).frame.height
         expandSheet(app)
-        let scroll = app.scrollViews["map-details-scroll"]
-        for label in ["Elapsed time", "Saved points", "Distance", "Current elevation", "Ascent", "Descent"] {
+        let scroll = recordingSheet(app)
+        for label in ["Duration", "Distance", "Ascent", "Descent"] {
             reveal(recordingMetric(app, label), in: scroll, app: app)
         }
         try audit(app, name: "recording-details-bottom-accessibility")
@@ -322,7 +317,7 @@ import XCTest
     }
 
     private func collapseRecordingSheet(_ app: XCUIApplication, to height: CGFloat) {
-        let scroll = app.scrollViews["map-details-scroll"]
+        let scroll = recordingSheet(app)
         let collapsed = NSPredicate { _, _ in abs(scroll.frame.height - height) <= 1 }
         for _ in 0..<2 {
             app.buttons.matching(identifier: "Sheet Grabber").allElementsBoundByIndex.last!.swipeDown()
@@ -362,10 +357,11 @@ import XCTest
         XCTAssertTrue(fullyVisible(), "The entire element must be reachable inside the viewport: \(element)", file: file, line: line)
     }
 
-    private func launch(category: String = "UICTContentSizeCategoryL", scenario: String = "populated", locale: String = "en_US") -> XCUIApplication {
+    private func launch(category: String = "UICTContentSizeCategoryL", scenario: String = "populated", locale: String = "en_US", location: String? = nil) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["--ui-testing", "-UIPreferredContentSizeCategoryName", category, "-AppleLocale", locale]
         app.launchEnvironment["SUNOH_UI_SCENARIO"] = scenario
+        if let location { app.launchEnvironment["SUNOH_UI_LOCATION"] = location }
         app.launch()
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         let permission = springboard.buttons["Allow While Using App"]
