@@ -64,13 +64,17 @@ private struct FullScreenLiveMap: View {
             RecordMapView(tracker: tracker, recorder: recorder, map: map)
                 .ignoresSafeArea()
         }
+        .overlay(alignment: .topLeading) {
+            MapSheetCloseButton(label: "Close full screen map", hint: "Returns to Live",
+                                identifier: "close-live-map", action: { dismiss() })
+                .padding()
+        }
         .onAppear { showDetails = true }
         .sheet(isPresented: $showDetails) {
             MapDetailsSheet {
                 LiveMapSheetHeader(
                     status: recorder.recordingStatus.withLocationReadiness(tracker.isLocationReady),
-                    recorder: recorder,
-                    onClose: { dismiss() }
+                    recorder: recorder
                 )
             } details: {
                 LiveMapRecordingDetails(recorder: recorder)
@@ -83,12 +87,10 @@ private struct FullScreenLiveMap: View {
 private struct LiveMapSheetHeader: View {
     let status: RecordingStatus
     let recorder: RecordingController
-    let onClose: () -> Void
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
             HStack {
-                closeButton
                 statusIcon
                 summary.fixedSize()
             }
@@ -96,7 +98,6 @@ private struct LiveMapSheetHeader: View {
 
             VStack {
                 HStack {
-                    closeButton
                     statusIcon
                     Spacer()
                 }
@@ -104,11 +105,6 @@ private struct LiveMapSheetHeader: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var closeButton: some View {
-        MapSheetCloseButton(label: "Close full screen map", hint: "Returns to Live",
-                            identifier: "close-live-map", action: onClose)
     }
 
     private var statusIcon: some View {

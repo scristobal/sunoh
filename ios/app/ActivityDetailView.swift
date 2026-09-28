@@ -33,6 +33,10 @@ struct ActivityDetailView: View {
             }
             .ignoresSafeArea()
         }
+        .overlay(alignment: .topLeading) {
+            closeButton
+                .padding()
+        }
         .onAppear { showDetails = true }
         .sheet(isPresented: $showDetails) {
             details
@@ -74,12 +78,9 @@ struct ActivityDetailView: View {
     private var sheetHeader: some View {
         switch content {
         case .loaded(let details):
-            HStack {
-                closeButton
-                ActivityHeading(activity: details.activity, analysis: currentAnalysis(for: details),
-                                processingFailed: analysisError != nil)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            ActivityHeading(activity: details.activity, analysis: currentAnalysis(for: details),
+                            processingFailed: analysisError != nil)
+                .frame(maxWidth: .infinity, alignment: .leading)
         case .failed(let error):
             ContentUnavailableView {
                 Label("Unable to Load Activity", systemImage: "exclamationmark.triangle")
@@ -89,17 +90,9 @@ struct ActivityDetailView: View {
                 Button("Retry") { content = .loading }
                     .buttonStyle(.bordered)
                     .controlSize(.large)
-                Button("Close") { dismiss() }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
             }
         case .loading:
-            VStack(spacing: 16) {
-                ProgressView("Loading activity…")
-                Button("Close") { dismiss() }
-                    .buttonStyle(.bordered)
-                    .controlSize(.large)
-            }
+            ProgressView("Loading activity…")
         }
     }
 
