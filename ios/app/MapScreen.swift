@@ -8,20 +8,9 @@ struct MapScreen: View {
     @State private var map = MapViewStore()
     @State private var showFullScreenMap = false
 
-    private var status: RecordingStatus {
-        recorder.recordingStatus.withLocationReadiness(tracker.isLocationReady)
-    }
-
     var body: some View {
         ScrollView {
             VStack {
-                HStack {
-                    RecordingStatusIcon(status: status)
-                    Text(status.label)
-                        .accessibilityIdentifier("map-recording-status")
-                }
-                .frame(maxWidth: .infinity)
-
                 Button {
                     showFullScreenMap = true
                 } label: {

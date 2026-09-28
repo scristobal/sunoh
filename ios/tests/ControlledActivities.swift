@@ -31,6 +31,7 @@ actor ControlledActivities: ActivityPersistence {
         let clock = ControlledClock()
         return ControlledActivities(repository: try await ActivityRepository.open(url: directory.appendingPathComponent("test.store"), clock: clock.now), clock: clock)
     }
+    func advanceClock(by milliseconds: Int64) { clock.advance(by: milliseconds) }
     func failHistory() { historyFails = true }
     func failGeometry() { geometryFails = true }
     func failWrites() { writesFail = true }
@@ -63,8 +64,7 @@ actor ControlledActivities: ActivityPersistence {
     }
     func start() async throws -> ActiveRecording { try await perform(.starting); return try await repository.start() }
     func active() async throws -> ActiveRecording? { try await perform(.restoring); return try await repository.active() }
-    func pause(id: ActivityID) async throws -> ActiveRecording { try await perform(.pausing); clock.advance(); return try await repository.pause(id: id) }
-    func resume(id: ActivityID) async throws -> ActiveRecording { try await perform(.resuming); return try await repository.resume(id: id) }
+    func stop(id: ActivityID) async throws -> ActiveRecording { try await perform(.stopping); clock.advance(); return try await repository.stop(id: id) }
     func finish(id: ActivityID) async throws -> ActivitySummary { try await perform(.saving); return try await repository.finish(id: id) }
     func discard(id: ActivityID) async throws { try await perform(.discarding); try await repository.discard(id: id) }
     func append(_ points: [TrackPoint], activityID: ActivityID) async throws -> ActiveRecording {
@@ -107,5 +107,5 @@ actor ControlledActivities: ActivityPersistence {
 final class ControlledClock: Sendable {
     private let value = Mutex<Int64>(1_000)
     func now() -> Int64 { value.withLock { $0 } }
-    func advance() { value.withLock { $0 += 1_000 } }
+    func advance(by milliseconds: Int64 = 1_000) { value.withLock { $0 += milliseconds } }
 }

@@ -99,7 +99,11 @@ import UIKit
                 recorder.reportStorageFailure(.storage("The activity store could not be opened. Your saved recordings are still on this device."))
             }
             #endif
+            #if DEBUG
+            let location = LocationTracker(manager: UITestFixture.locationManager(), onPoints: recorder.record)
+            #else
             let location = LocationTracker(onPoints: recorder.record)
+            #endif
             startup = .ready(Ready(recorder: recorder, library: library, location: location))
             liveActivity.startObserving(recorder: recorder, location: location)
             location.activate()

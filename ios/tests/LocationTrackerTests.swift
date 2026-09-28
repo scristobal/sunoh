@@ -97,7 +97,7 @@ import Testing
         #expect(tracker.isLocationReady)
     }
 
-    @Test(arguments: [RecordingStatus.recording, .paused, .working(.saving), .working(.starting), .unavailable])
+    @Test(arguments: [RecordingStatus.recording, .stopped, .working(.saving), .working(.starting), .unavailable])
     func locationReadinessPreservesExistingRecordingStates(_ status: RecordingStatus) {
         #expect(status.withLocationReadiness(false) == status)
         #expect(status.withLocationReadiness(true) == status)

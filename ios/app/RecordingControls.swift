@@ -22,9 +22,18 @@ struct RecordingSummary: View {
         recorder.recordingStatus.withLocationReadiness(tracker.isLocationReady)
     }
 
+    private var locationUnavailableReason: String {
+        switch tracker.authorizationStatus {
+        case .notDetermined: "Location permission required"
+        case .denied: "Location access denied"
+        case .restricted: "Location access restricted"
+        case .authorizedAlways, .authorizedWhenInUse: tracker.locationMessage ?? "Waiting for location"
+        @unknown default: "Location unavailable"
+        }
+    }
+
     var body: some View {
-        RecordingActionRow(recorder: recorder, status: status)
-            .labelStyle(.titleAndIcon)
+        RecordingSlider(recorder: recorder, status: status, locationUnavailableReason: locationUnavailableReason)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

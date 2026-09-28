@@ -66,10 +66,11 @@ struct TrackPoint: Codable, Hashable, Sendable {
     var longitude: Double { coordinate.longitude }
 }
 
-enum ActivityStatus: String, Codable, Sendable { case recording, paused, completed }
+// Keep the stored value for unfinished recordings readable without changing their observations.
+enum ActivityStatus: String, Codable, Sendable { case recording, stopped = "paused", completed }
 enum ActivityOrigin: String, Codable, Sendable { case deviceRecording, gpxImport }
 enum SegmentBoundary: String, Codable, Sendable { case recordingStarted, recordingResumed, importedSegment }
-enum RecordingPhase: String, Codable, Sendable { case recording, paused }
+enum RecordingPhase: String, Codable, Sendable { case recording, stopped = "paused" }
 
 struct ActivitySummary: Codable, Equatable, Identifiable, Sendable {
     let id: ActivityID
@@ -88,7 +89,14 @@ struct ActiveRecording: Equatable, Sendable {
     let phase: RecordingPhase
     let segmentID: SegmentID
     let recordingStartedAt: Timestamp
+    var recordingStoppedAt: Timestamp? = nil
     var id: ActivityID { summary.id }
+
+    var needsSaveDecision: Bool {
+        guard let recordingStoppedAt else { return false }
+        let duration = recordingStoppedAt.millisecondsSince1970 - summary.startedAt.millisecondsSince1970
+        return summary.pointCount < 10 || duration < 60_000
+    }
 }
 
 struct TrackSegment: Equatable, Identifiable, Sendable {

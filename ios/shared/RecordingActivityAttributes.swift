@@ -2,7 +2,7 @@ import ActivityKit
 import Foundation
 
 struct RecordingActivityAttributes: ActivityAttributes, Sendable {
-    enum Phase: String, Codable, Hashable, Sendable { case recording, paused, blocked }
+    enum Phase: String, Codable, Hashable, Sendable { case recording, stopped, blocked }
 
     struct ContentState: Codable, Hashable, Sendable {
         var pointCount: Int

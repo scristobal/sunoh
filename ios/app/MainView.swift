@@ -14,6 +14,7 @@ struct MainView: View {
     @State private var selectedTab: AppTab = .map
     @State private var selectedActivity: ActivitySummary?
     @State private var showLocationAccessAlert = false
+    @State private var showSaveDecision = false
 
     private var isSaving: Bool {
         recorder.recordingStatus == .working(.saving)
@@ -36,6 +37,15 @@ struct MainView: View {
         }
         .onChange(of: selectedTab, initial: true) {
             if selectedTab == .map { requestMapLocationAccess() }
+        }
+        .onChange(of: recorder.needsSaveDecision, initial: true) {
+            showSaveDecision = recorder.needsSaveDecision
+        }
+        .alert("Save this recording?", isPresented: $showSaveDecision) {
+            Button("Save", role: .cancel) { Task { await recorder.finishRecording() } }
+            Button("Discard", role: .destructive) { Task { await recorder.discardRecording() } }
+        } message: {
+            Text("This recording has fewer than 10 points or lasted less than 1 minute. You can save it or discard it.")
         }
         .alert("Location access needed", isPresented: $showLocationAccessAlert) {
             if tracker.authorizationStatus == .denied {

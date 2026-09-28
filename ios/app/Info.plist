@@ -27,7 +27,7 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Sunō keeps your location active to show your position and record your route, including in the background. Pausing stops saving points while location stays active.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Sunō keeps location updates active in the background. Points are saved only while recording; you can pause saving at any time.</string>
+	<string>Sunō keeps location updates active in the background. Points are saved only while recording; slide to stop recording at any time.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

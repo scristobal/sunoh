@@ -1,13 +1,12 @@
 /// Work that changes or restores the active recording, separate from routine point writes.
 enum RecordingOperation: Equatable {
-    case restoring, starting, pausing, resuming, saving, discarding
+    case restoring, starting, stopping, saving, discarding
 
     var label: String {
         switch self {
         case .restoring: "Loading recording"
         case .starting: "Starting"
-        case .pausing: "Pausing"
-        case .resuming: "Resuming"
+        case .stopping: "Stopping"
         case .saving: "Saving"
         case .discarding: "Discarding"
         }
@@ -21,7 +20,7 @@ enum RecordingStatus: Equatable {
     case locationNotReady
     case working(RecordingOperation)
     case recording
-    case paused
+    case stopped
     case unavailable
 
     var isWorking: Bool {
@@ -42,7 +41,7 @@ enum RecordingStatus: Equatable {
         case .locationNotReady: "Location not ready"
         case .working(let operation): operation.label
         case .recording: "Recording"
-        case .paused: "Paused"
+        case .stopped: "Recording stopped"
         case .unavailable: "Recording unavailable"
         }
     }

@@ -38,7 +38,7 @@ struct ActivityModelTests {
         #expect(late.summary.sourceRevision > first.summary.sourceRevision)
         let retry = try await repository.append([points[2]], activityID: active.id)
         #expect(retry.summary.sourceRevision == late.summary.sourceRevision)
-        _ = try await repository.pause(id: active.id)
+        _ = try await repository.stop(id: active.id)
         let finished = try await repository.finish(id: active.id)
         #expect(finished.lastPointAt == 1_003)
         #expect(finished.completedAt == 1_003)

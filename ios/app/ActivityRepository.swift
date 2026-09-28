@@ -8,8 +8,7 @@ struct ActivityProcessingInput: Sendable {
 
 protocol ActivityPersistence: Actor {
     func start() async throws -> ActiveRecording
-    func pause(id: ActivityID) async throws -> ActiveRecording
-    func resume(id: ActivityID) async throws -> ActiveRecording
+    func stop(id: ActivityID) async throws -> ActiveRecording
     func finish(id: ActivityID) async throws -> ActivitySummary
     func active() async throws -> ActiveRecording?
     func append(_ points: [TrackPoint], activityID: ActivityID) async throws -> ActiveRecording
@@ -108,7 +107,8 @@ enum ActivityDatabase {
         let segment = try currentSegment(value)
         guard let startedAt = segment.recordingStartedAtMilliseconds else { throw ActivityError.invalidData("Missing recording interval.") }
         return ActiveRecording(summary: summary, phase: phase, segmentID: SegmentID(rawValue: segment.id),
-                               recordingStartedAt: Timestamp(millisecondsSince1970: startedAt))
+                               recordingStartedAt: Timestamp(millisecondsSince1970: startedAt),
+                               recordingStoppedAt: segment.recordingStoppedAtMilliseconds.map(Timestamp.init(millisecondsSince1970:)))
     }
 
     func active() throws -> ActiveRecording? { try openActivity().map(recording) }
@@ -126,31 +126,14 @@ enum ActivityDatabase {
         }
     }
 
-    func pause(id: ActivityID) throws -> ActiveRecording {
+    func stop(id: ActivityID) throws -> ActiveRecording {
         try write {
             let value = try activity(id)
             guard value.statusRawValue != ActivityStatus.completed.rawValue else { throw ActivityError.invalidTransition }
             if value.statusRawValue == ActivityStatus.recording.rawValue {
                 let segment = try currentSegment(value)
                 segment.recordingStoppedAtMilliseconds = max(now(), value.lastPointAtMilliseconds ?? value.startedAtMilliseconds)
-                value.statusRawValue = ActivityStatus.paused.rawValue; value.sourceRevision += 1
-            }
-            return try recording(value)
-        }
-    }
-
-    func resume(id: ActivityID) throws -> ActiveRecording {
-        try write {
-            let value = try activity(id)
-            guard value.statusRawValue != ActivityStatus.completed.rawValue else { throw ActivityError.invalidTransition }
-            if value.statusRawValue == ActivityStatus.paused.rawValue {
-                let previous = try currentSegment(value)
-                let lowerBound = max(previous.recordingStoppedAtMilliseconds ?? 0, value.lastPointAtMilliseconds ?? value.startedAtMilliseconds)
-                guard lowerBound < Int64.max else { throw ActivityError.invalidTransition }
-                let segment = StoredTrackSegment(ordinal: previous.ordinal + 1, boundary: .recordingResumed, activity: value)
-                segment.recordingStartedAtMilliseconds = max(now(), lowerBound + 1)
-                modelContext.insert(segment); value.currentSegmentID = segment.id
-                value.statusRawValue = ActivityStatus.recording.rawValue; value.sourceRevision += 1
+                value.statusRawValue = ActivityStatus.stopped.rawValue; value.sourceRevision += 1
             }
             return try recording(value)
         }
@@ -160,9 +143,10 @@ enum ActivityDatabase {
         try write {
             let value = try activity(id)
             guard value.statusRawValue != ActivityStatus.recording.rawValue else { throw ActivityError.invalidTransition }
-            if value.statusRawValue == ActivityStatus.paused.rawValue {
+            if value.statusRawValue == ActivityStatus.stopped.rawValue {
+                let segment = try currentSegment(value)
                 value.statusRawValue = ActivityStatus.completed.rawValue
-                value.completedAtMilliseconds = max(now(), value.lastPointAtMilliseconds ?? value.startedAtMilliseconds)
+                value.completedAtMilliseconds = segment.recordingStoppedAtMilliseconds
                 value.currentSegmentID = nil; value.sourceRevision += 1
             }
             return try value.summary()
@@ -323,7 +307,7 @@ enum ActivityDatabase {
     func discard(id: ActivityID) throws {
         try write {
             let value = try activity(id)
-            guard value.statusRawValue == ActivityStatus.paused.rawValue else { throw ActivityError.invalidTransition }
+            guard value.statusRawValue == ActivityStatus.stopped.rawValue else { throw ActivityError.invalidTransition }
             modelContext.delete(value)
         }
     }

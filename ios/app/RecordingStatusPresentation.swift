@@ -7,7 +7,7 @@ extension RecordingStatus {
         case .locationNotReady: "location.slash"
         case .working: "hourglass"
         case .recording: "record.circle"
-        case .paused: "pause.circle"
+        case .stopped: "stop.circle"
         case .unavailable: "exclamationmark.triangle"
         }
     }
@@ -15,7 +15,7 @@ extension RecordingStatus {
     var color: Color {
         switch self {
         case .ready: .green
-        case .locationNotReady, .paused: .orange
+        case .locationNotReady, .stopped: .orange
         case .working: .secondary
         case .recording, .unavailable: .red
         }

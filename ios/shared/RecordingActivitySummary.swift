@@ -2,11 +2,11 @@ import SwiftUI
 
 extension RecordingActivityAttributes.ContentState {
     var statusLabel: String {
-        isBlocked ? "Storage unavailable" : (isRecording ? "Recording" : "Paused")
+        isBlocked ? "Storage unavailable" : (isRecording ? "Recording" : "Recording stopped")
     }
 
     var statusSymbol: String {
-        isBlocked ? "exclamationmark.triangle" : (isRecording ? "record.circle" : "pause.circle")
+        isBlocked ? "exclamationmark.triangle" : (isRecording ? "record.circle" : "stop.circle")
     }
 }
 
@@ -78,7 +78,7 @@ struct RecordingTime: View {
     var body: some View {
         Group {
             if let start = state.startedAt, let end = state.lastPointAt {
-                // Show saved-point time, without running a timer while paused.
+                // Show only the time covered by saved points.
                 Text(timerInterval: start...max(start, end), pauseTime: end, countsDown: false)
                     .monospacedDigit()
             } else {

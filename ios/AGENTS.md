@@ -10,7 +10,7 @@
 
 - Keep recording independent of view lifetime, navigation, route rendering and map-service availability. Backgrounding the app must not end an active recording.
 - Treat persisted observations as the source of truth. Never present points as saved before persistence succeeds, and make failures and unsaved work visible.
-- Resuming must continue the same activity. Preserve recorded observations and pause boundaries through saving, reopening and changes to storage.
+- Preserve recorded observations and source recording boundaries through saving, reopening and changes to storage.
 - All current installations are controlled and can be wiped and reseeded. Keep a single V0 storage schema and reset incompatible development stores instead of maintaining historical schemas or migration paths.
 - Keep tests and development data preparation separate from the user's live recording store. Do not reset or replace real recordings to make a test pass.
 

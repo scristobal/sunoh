@@ -4,6 +4,115 @@ import Testing
 @testable import Sunoh
 
 @MainActor struct RecordingControllerTests {
+    @Test(arguments: [(0, 60_000, true), (9, 60_000, true), (10, 59_999, true), (10, 60_000, false), (11, 61_000, false)])
+    func stoppingUsesCommittedPointCountAndDuration(_ count: Int, _ duration: Int, _ needsDecision: Bool) async throws {
+        let db = try await ControlledActivities.create()
+        let store = RecordingController(repository: db, saveFeedback: .init(minimumDuration: .zero))
+        try await store.restore()
+        await store.startRecording()
+        let id = try #require(store.currentActivity?.id)
+        store.record((0..<count).map { sample(1_001 + Int64($0)) })
+        await db.advanceClock(by: Int64(duration) - 1_000)
+        await store.stopRecording()
+
+        #expect(store.storageError == nil)
+        #expect(store.pendingCount == 0)
+        #expect(store.needsSaveDecision == needsDecision)
+        #expect(try await db.recordedTrack(id: id).segments.flatMap(\.points).count == count)
+        if needsDecision {
+            #expect(store.recordingStatus == .stopped)
+            #expect(try await db.summaries().isEmpty)
+            store.record([sample(90_000)])
+            await store.startRecording()
+            #expect(store.currentActivity?.id == id)
+            #expect(store.pendingCount == 0)
+            #expect(store.pointCount == count)
+        } else {
+            #expect(store.recordingStatus == .ready)
+            #expect(try await db.summaries().map(\.id) == [id])
+            #expect(try await db.summary(id: id).completedAt?.millisecondsSince1970 == 1_000 + Int64(duration))
+        }
+    }
+
+    @Test func automaticSaveWaitsForQueuedPointsAndRejectsDuplicateCommands() async throws {
+        let db = try await ControlledActivities.create()
+        let store = RecordingController(repository: db, saveFeedback: .init(minimumDuration: .zero))
+        try await store.restore()
+        await store.startRecording()
+        let id = try #require(store.currentActivity?.id)
+        await db.advanceClock(by: 59_000)
+        await db.blockNextWrite()
+        store.record((1_001...1_005).map { sample(Int64($0)) })
+        await db.waitForWrite()
+        store.record((1_006...1_010).map { sample(Int64($0)) })
+        let stop = Task { await store.stopRecording() }
+        for await operation in Observations({ store.operation }) {
+            if operation == .stopping { break }
+        }
+        store.record([sample(1_011)])
+        await store.stopRecording()
+        await store.startRecording()
+        await store.discardRecording()
+        #expect(store.pendingCount == 10)
+        await db.releaseWrite()
+        await stop.value
+        #expect(store.recordingStatus == .ready)
+        #expect(!store.needsSaveDecision)
+        #expect(try await db.summaries().map(\.id) == [id])
+        #expect(try await db.summary(id: id).pointCount == 10)
+    }
+
+    @Test(arguments: [false, true])
+    func reopeningAStoppedRecordingRestoresDecisionOrCompletesSave(_ short: Bool) async throws {
+        let db = try await ControlledActivities.create()
+        let active = try await db.start()
+        _ = try await db.append((1_001...1_010).map { sample(Int64($0)) }, activityID: active.id)
+        if !short { await db.advanceClock(by: 59_000) }
+        _ = try await db.stop(id: active.id)
+        let store = RecordingController(repository: db, saveFeedback: .init(minimumDuration: .zero))
+        try await store.restore()
+        #expect(store.needsSaveDecision == short)
+        if short {
+            #expect(store.currentActivity?.id == active.id)
+            #expect(store.recordingStatus == .stopped)
+            await store.finishRecording()
+        }
+        #expect(try await db.summaries().map(\.id) == [active.id])
+        #expect(store.recordingStatus == .ready)
+    }
+
+    @Test func failedAutomaticSavePreservesStoppedRecordingForRecovery() async throws {
+        let db = try await ControlledActivities.create()
+        let store = RecordingController(repository: db)
+        try await store.restore()
+        await store.startRecording()
+        let id = try #require(store.currentActivity?.id)
+        store.record((1_001...1_010).map { sample(Int64($0)) })
+        await db.advanceClock(by: 59_000)
+        await db.failOperation(.saving)
+        await store.stopRecording()
+        #expect(store.recordingStatus == .unavailable)
+        #expect(store.currentRecording?.phase == .stopped)
+        #expect(store.currentActivity?.id == id)
+        #expect(store.pointCount == 10)
+        #expect(!store.needsSaveDecision)
+        #expect(try await db.summaries().isEmpty)
+        await store.discardRecording()
+        #expect(try await db.active()?.id == id)
+    }
+
+    @Test func activeRecordingCannotBeDiscardedOrSavedBeforeStopping() async throws {
+        let db = try await ControlledActivities.create()
+        let store = RecordingController(repository: db)
+        try await store.restore()
+        await store.startRecording()
+        let id = store.currentActivity?.id
+        await store.discardRecording()
+        await store.finishRecording()
+        #expect(store.currentActivity?.id == id)
+        #expect(store.recordingStatus == .recording)
+    }
+
     @Test func thumbnailFailureDoesNotChangeRecordingHealth() async throws {
         let db = try await ControlledActivities.create()
         let store = RecordingController(repository: db)
@@ -35,7 +144,7 @@ import Testing
         guard case .loaded(let history) = library.history else { Issue.record("Expected imported history"); return }
         #expect(history.count == 1)
         store.record([sample(1_001)])
-        await store.pauseRecording()
+        await store.stopRecording()
         #expect(store.pointCount == 1)
     }
 
@@ -77,7 +186,7 @@ import Testing
         #expect(store.recordingStatus == .ready)
     }
 
-    @Test(arguments: [RecordingOperation.starting, .pausing, .resuming, .saving, .discarding])
+    @Test(arguments: [RecordingOperation.starting, .stopping, .saving, .discarding])
     func statusFollowsTheEntireRecordingOperation(_ operation: RecordingOperation) async throws {
         let db = try await ControlledActivities.create()
         let store = RecordingController(repository: db, saveFeedback: .init(minimumDuration: .zero))
@@ -86,14 +195,13 @@ import Testing
         library.onStorageFailure = { error in store.reportStorageFailure(error) }
         try await store.restore()
         if operation != .starting { await store.startRecording() }
-        if [.resuming, .saving, .discarding].contains(operation) { await store.pauseRecording() }
+        if [.saving, .discarding].contains(operation) { await store.stopRecording() }
 
         await db.blockOperation(operation)
         let change = Task {
             switch operation {
             case .starting: await store.startRecording()
-            case .pausing: await store.pauseRecording()
-            case .resuming: await store.resumeRecording()
+            case .stopping: await store.stopRecording()
             case .saving: await store.finishRecording()
             case .discarding: await store.discardRecording()
             case .restoring: Issue.record("Restoration is tested separately")
@@ -106,8 +214,8 @@ import Testing
         await change.value
 
         let expected: RecordingStatus = switch operation {
-        case .starting, .resuming: .recording
-        case .pausing: .paused
+        case .starting: .recording
+        case .stopping: .stopped
         case .saving, .discarding: .ready
         case .restoring: .ready
         }
@@ -135,7 +243,7 @@ import Testing
         library.onStorageFailure = { error in store.reportStorageFailure(error) }
         try await store.restore()
         await store.startRecording()
-        await store.pauseRecording()
+        await store.stopRecording()
         let id = store.currentActivity?.id
         await db.failOperation(.saving)
         await store.finishRecording()
@@ -155,7 +263,7 @@ import Testing
         library.onStorageFailure = { error in store.reportStorageFailure(error) }
         try await store.restore()
         await store.startRecording()
-        await store.pauseRecording()
+        await store.stopRecording()
         await store.finishRecording()
         await timer.waitForSleep()
 
@@ -185,7 +293,7 @@ import Testing
         library.onStorageFailure = { error in store.reportStorageFailure(error) }
         try await store.restore()
         await store.startRecording()
-        await store.pauseRecording()
+        await store.stopRecording()
         await db.blockOperation(.saving)
         let save = Task { await store.finishRecording() }
         await db.waitForOperation()
@@ -229,10 +337,10 @@ import Testing
         try await store.restore()
         await store.startRecording()
         store.record([sample(1_001)])
-        await store.pauseRecording()
+        await store.stopRecording()
         #expect(store.pointCount == 1)
         #expect(store.storageError == nil)
-        #expect(store.recordingState == .paused)
+        #expect(store.recordingState == .stopped)
     }
 
     @Test func terminalFailureIsNotClearedBySuccessfulReadsAndStopsIntake() async throws {
@@ -245,7 +353,7 @@ import Testing
         await store.startRecording()
         await db.failWrites()
         store.record([sample(1_001)])
-        await store.pauseRecording()
+        await store.stopRecording()
         #expect(store.requiresRestart)
         #expect(store.pendingCount == 1)
         store.record([sample(1_002)])
@@ -256,7 +364,7 @@ import Testing
         #expect(store.storageError != nil)
     }
 
-    @Test func pauseCutsOffIntakeWhileAWriteIsSuspended() async throws {
+    @Test func stopCutsOffIntakeWhileAWriteIsSuspended() async throws {
         let db = try await ControlledActivities.create()
         let store = RecordingController(repository: db)
         let library = ActivityLibrary(repository: db)
@@ -269,17 +377,17 @@ import Testing
         await db.waitForWrite()
         #expect(store.recordingStatus == .recording)
         #expect(store.pointCount == 0)
-        let pause = Task { await store.pauseRecording() }
+        let stop = Task { await store.stopRecording() }
         for await operation in Observations({ store.operation }) {
-            if operation == .pausing { break }
+            if operation == .stopping { break }
         }
-        #expect(store.recordingStatus == .working(.pausing))
+        #expect(store.recordingStatus == .working(.stopping))
         store.record([sample(1_002)])
         await db.releaseWrite()
-        await pause.value
+        await stop.value
         #expect(store.pointCount == 1)
-        #expect(store.recordingState == .paused)
-        #expect(store.recordingStatus == .paused)
+        #expect(store.recordingState == .stopped)
+        #expect(store.recordingStatus == .stopped)
     }
 
     @Test(arguments: [RecordingOperation.saving, .discarding])
@@ -295,11 +403,12 @@ import Testing
         store.record([sample(1_002)])
 
         let completion = Task {
+            await store.stopRecording()
             if operation == .saving { await store.finishRecording() }
             else { await store.discardRecording() }
         }
         for await current in Observations({ store.operation }) {
-            if current == operation { break }
+            if current == .stopping { break }
         }
         store.record([sample(1_003)])
         #expect(store.pendingCount == 2)
@@ -320,8 +429,7 @@ import Testing
         }
     }
 
-    @Test(arguments: [RecordingOperation.saving, .discarding])
-    func failureToStopAnActiveRecordingPreservesItsPoints(_ operation: RecordingOperation) async throws {
+    @Test func failureToStopAnActiveRecordingPreservesItsPoints() async throws {
         let db = try await ControlledActivities.create()
         let store = RecordingController(repository: db)
         try await store.restore()
@@ -329,10 +437,9 @@ import Testing
         let id = try #require(store.currentActivity?.id)
         store.record([sample(1_001)])
         await store.refresh()
-        await db.failOperation(.pausing)
+        await db.failOperation(.stopping)
 
-        if operation == .saving { await store.finishRecording() }
-        else { await store.discardRecording() }
+        await store.stopRecording()
 
         #expect(store.recordingStatus == .unavailable)
         #expect(store.currentActivity?.id == id)
@@ -350,7 +457,7 @@ import Testing
         await library.reloadHistory()
         await store.startRecording()
         store.record([sample(1_001)])
-        await store.pauseRecording()
+        await store.stopRecording()
         await db.failHistory()
         await store.finishRecording()
         #expect(store.currentActivity == nil)

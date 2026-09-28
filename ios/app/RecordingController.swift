@@ -2,7 +2,7 @@ import Foundation
 import Observation
 
 enum RecordingState {
-    case idle, recording, paused, unavailable
+    case idle, recording, stopped, unavailable
 }
 
 @MainActor @Observable final class RecordingController {
@@ -28,11 +28,14 @@ enum RecordingState {
         guard case .loaded = recording, failure == nil else { return .unavailable }
         switch currentRecording?.phase {
         case .recording: return .recording
-        case .paused: return .paused
+        case .stopped: return .stopped
         case nil: return .idle
         }
     }
     var isChangingRecording: Bool { operation != nil || recordingState == .unavailable }
+    var needsSaveDecision: Bool {
+        !isChangingRecording && currentRecording?.phase == .stopped && currentRecording?.needsSaveDecision == true
+    }
 
     var recordingStatus: RecordingStatus {
         guard failure == nil else { return .unavailable }
@@ -43,7 +46,7 @@ enum RecordingState {
         case .loaded(let active):
             switch active?.phase {
             case .recording: return .recording
-            case .paused: return .paused
+            case .stopped: return .stopped
             case nil: return saveFeedback.isVisible ? .working(.saving) : .ready
             }
         }
@@ -72,6 +75,7 @@ enum RecordingState {
         do {
             recording = .loaded(try await repository.active())
             refreshGeometry(force: true)
+            await finishStoppedRecordingIfNeeded()
         } catch {
             recording = .failed(error.localizedDescription)
             setFailure(error)
@@ -88,53 +92,54 @@ enum RecordingState {
                 self.failure = nil
             }
             refreshGeometry(force: true)
+            await finishStoppedRecordingIfNeeded()
         } catch { setFailure(error) }
     }
 
     func startRecording() async {
-        guard recordingState == .idle else { return }
+        guard recordingState == .idle, !recordingStatus.isWorking else { return }
         await change(.starting) {
             self.recording = .loaded(try await self.repository.start())
             self.geometry = .loaded(nil)
         }
     }
 
-    func pauseRecording() async {
+    func stopRecording() async {
         guard recordingState == .recording, let id = currentActivity?.id else { return }
-        await change(.pausing) {
-            self.recording = .loaded(try await self.repository.pause(id: id))
+        await change(.stopping) {
+            self.recording = .loaded(try await self.repository.stop(id: id))
             try await self.drainPoints()
+            if self.currentRecording?.needsSaveDecision == false {
+                self.operation = .saving
+                self.saveFeedback.begin()
+                try await self.saveRecording(id: id)
+            }
         }
     }
 
-    func resumeRecording() async {
-        guard recordingState == .paused, let id = currentActivity?.id else { return }
-        await change(.resuming) {
-            try await self.drainPoints()
-            self.recording = .loaded(try await self.repository.resume(id: id))
-        }
+    private func finishStoppedRecordingIfNeeded() async {
+        guard currentRecording?.phase == .stopped, currentRecording?.needsSaveDecision == false else { return }
+        await finishRecording()
     }
 
     func finishRecording() async {
-        guard recordingState == .paused || recordingState == .recording, let id = currentActivity?.id else { return }
+        guard recordingState == .stopped, let id = currentActivity?.id else { return }
         await change(.saving) {
-            if self.currentRecording?.phase == .recording {
-                self.recording = .loaded(try await self.repository.pause(id: id))
-            }
             try await self.drainPoints()
-            let saved = try await self.repository.finish(id: id)
-            self.recording = .loaded(nil)
-            self.geometry = .loaded(nil)
-            await self.onCompleted?(saved)
+            try await self.saveRecording(id: id)
         }
     }
 
+    private func saveRecording(id: ActivityID) async throws {
+        let saved = try await repository.finish(id: id)
+        recording = .loaded(nil)
+        geometry = .loaded(nil)
+        await onCompleted?(saved)
+    }
+
     func discardRecording() async {
-        guard recordingState == .paused || recordingState == .recording, let id = currentActivity?.id else { return }
+        guard needsSaveDecision, let id = currentActivity?.id else { return }
         await change(.discarding) {
-            if self.currentRecording?.phase == .recording {
-                self.recording = .loaded(try await self.repository.pause(id: id))
-            }
             try await self.repository.discard(id: id)
             self.pending = []; self.pendingActivityID = nil; self.pendingCount = 0
             self.oldestPending = nil
@@ -143,7 +148,7 @@ enum RecordingState {
     }
 
     func record(_ points: [TrackPoint]) {
-        guard failure == nil, operation != .pausing, operation != .saving, operation != .discarding,
+        guard failure == nil, operation == nil,
               let active = currentRecording, active.phase == .recording else { return }
         let accepted = points.filter { $0.recordedAt >= active.recordingStartedAt }
         guard !accepted.isEmpty else { return }

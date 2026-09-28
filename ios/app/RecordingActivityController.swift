@@ -20,7 +20,7 @@ import UIKit
             guard let active, location.hasLocationPermission else { return Update.end }
             return Update.content(.init(
                 pointCount: Int(clamping: active.summary.pointCount),
-                phase: recorder.storageError != nil ? .blocked : (active.phase == .recording ? .recording : .paused),
+                phase: recorder.storageError != nil ? .blocked : (active.phase == .recording && recorder.operation != .stopping ? .recording : .stopped),
                 startedAt: active.summary.startedAt.date,
                 lastPointAt: active.summary.lastPointAt?.date
             ))

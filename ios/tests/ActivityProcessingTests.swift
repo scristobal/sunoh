@@ -501,7 +501,7 @@ struct ActivityProcessingTests {
         await library.reloadHistory()
         await store.startRecording()
         store.record([try! TrackPoint(timestampMilliseconds: 1_000, latitude: 47, longitude: 11, elevationMeters: 2_000)])
-        await store.pauseRecording()
+        await store.stopRecording()
         await store.finishRecording()
         await library.processingTask?.value
         let saved = try #require(try await repository.summaries().first)
@@ -584,7 +584,7 @@ struct ActivityProcessingTests {
         let url = try processingURL()
         let repository = try await ActivityRepository.open(url: url, clock: { 1_000 })
         let active = try await repository.start()
-        _ = try await repository.pause(id: active.id)
+        _ = try await repository.stop(id: active.id)
         _ = try await repository.finish(id: active.id)
         let processor = ActivityProcessor(repository: repository)
         let result = try await processor.process(id: active.id)

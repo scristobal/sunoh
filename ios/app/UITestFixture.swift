@@ -1,5 +1,7 @@
 #if DEBUG
 import Foundation
+import CoreLocation
+import Synchronization
 
 /// UI tests exercise the real repository in a new temporary directory on every
 /// launch. They never open, seed, migrate or remove the user's activity store.
@@ -9,11 +11,22 @@ enum UITestFixture {
         return ProcessInfo.processInfo.environment["SUNOH_UI_SCENARIO"] ?? "populated"
     }
 
+    static func locationManager() -> CLLocationManager {
+        if scenario != nil, let value = ProcessInfo.processInfo.environment["SUNOH_UI_LOCATION"],
+           let state = FixtureLocationManager.State(rawValue: value) {
+            return FixtureLocationManager(state: state)
+        }
+        return CLLocationManager()
+    }
+
     static func repository() async throws -> ActivityRepository {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("ui-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let repository = try await ActivityRepository.open(url: directory.appendingPathComponent("Activities.store"))
+        let initialTime = Mutex<Int64?>(scenario == "long-recording" ? Int64(Date().timeIntervalSince1970 * 1_000) - 120_000 : nil)
+        let repository = try await ActivityRepository.open(url: directory.appendingPathComponent("Activities.store"), clock: {
+            initialTime.withLock { $0 } ?? Int64(Date().timeIntervalSince1970 * 1_000)
+        })
         if scenario != "empty" {
             let start: Int64 = 1_784_937_600_000
             var tracks: [GPXTrack] = []
@@ -63,12 +76,16 @@ enum UITestFixture {
             if scenario == "ski-matching" { try await addSkiMatchingFixture(to: repository) }
             if scenario == "lift-detection" { try await addLiftDetectionFixture(to: repository) }
         }
-        if scenario == "paused" || scenario == "recording" {
+        if ["stopped", "recording", "long-recording"].contains(scenario ?? "") {
             let recording = try await repository.start()
-            let point = try TrackPoint(timestampMilliseconds: recording.summary.startedAt.millisecondsSince1970,
-                                       latitude: 47, longitude: 11, elevationMeters: 2_000)
-            _ = try await repository.append([point], activityID: recording.id)
-            if scenario == "paused" { _ = try await repository.pause(id: recording.id) }
+            let count = scenario == "long-recording" ? 13 : 1
+            let points = try (0..<count).map { index in
+                try TrackPoint(timestampMilliseconds: recording.summary.startedAt.millisecondsSince1970 + Int64(index) * 10_000,
+                               latitude: 47 + Double(index) / 10_000, longitude: 11, elevationMeters: 2_000)
+            }
+            _ = try await repository.append(points, activityID: recording.id)
+            initialTime.withLock { $0 = nil }
+            if scenario == "stopped" { _ = try await repository.stop(id: recording.id) }
         }
         return repository
     }
@@ -219,6 +236,35 @@ enum UITestFixture {
         }
         let isolated = try point(seconds: 780, east: 300, north: 420, elevation: 1_800)
         return GPXTrack(segments: [GPXSegment(points: skiing), GPXSegment(points: traverses), GPXSegment(points: [isolated])])
+    }
+}
+
+private final class FixtureLocationManager: CLLocationManager {
+    enum State: String { case ready, waiting, undetermined, denied, restricted }
+    private let state: State
+
+    init(state: State) {
+        self.state = state
+        super.init()
+    }
+
+    override var authorizationStatus: CLAuthorizationStatus {
+        switch state {
+        case .ready, .waiting: .authorizedWhenInUse
+        case .undetermined: .notDetermined
+        case .denied: .denied
+        case .restricted: .restricted
+        }
+    }
+
+    override func requestWhenInUseAuthorization() {}
+
+    override func startUpdatingLocation() {
+        guard state == .ready else { return }
+        delegate?.locationManager?(self, didUpdateLocations: [
+            CLLocation(coordinate: CLLocationCoordinate2D(latitude: 47, longitude: 11), altitude: 2_000,
+                       horizontalAccuracy: 5, verticalAccuracy: 5, timestamp: Date())
+        ])
     }
 }
 

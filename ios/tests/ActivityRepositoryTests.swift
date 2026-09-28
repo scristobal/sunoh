@@ -90,7 +90,7 @@ struct ActivityRepositoryTests {
         let second = GPXTrack(segments: [GPXSegment(points: [point(30_001)]), GPXSegment(points: [point(90_001)])])
         _ = try await library.importTracks([first, second])
         let empty = try await fixture.repository.start()
-        _ = try await fixture.repository.pause(id: empty.id)
+        _ = try await fixture.repository.stop(id: empty.id)
         _ = try await fixture.repository.finish(id: empty.id)
         let active = try await fixture.repository.start()
         _ = try await fixture.repository.append([point(1_001)], activityID: active.id)
@@ -114,7 +114,7 @@ struct ActivityRepositoryTests {
     @Test @MainActor func onlyEmptySavedActivitiesCannotBeExported() async throws {
         let fixture = try await Fixture.create()
         let empty = try await fixture.repository.start()
-        _ = try await fixture.repository.pause(id: empty.id)
+        _ = try await fixture.repository.stop(id: empty.id)
         _ = try await fixture.repository.finish(id: empty.id)
         let store = RecordingController(repository: fixture.repository)
         let library = ActivityLibrary(repository: fixture.repository)
@@ -160,7 +160,7 @@ struct ActivityRepositoryTests {
         let repository = try await ActivityRepository.open(url: url, clock: { 1_000 }, commit: commit.save)
         let savedID = try await repository.start().id
         _ = try await repository.append([point(1_001)], activityID: savedID)
-        _ = try await repository.pause(id: savedID)
+        _ = try await repository.stop(id: savedID)
         _ = try await repository.finish(id: savedID)
         let active = try await repository.start()
         let original = try await repository.recordedTrack(id: savedID).gpx
@@ -179,14 +179,11 @@ struct ActivityRepositoryTests {
 
     @Test func gpxRoundTripPreservesStoredSamplesAndSourceBoundaries() async throws {
         let f = try await Fixture.create()
-        let id = try await f.repository.start().id
-        _ = try await f.repository.append([point(1_001), point(61_001, longitude: 11.001, elevationMeters: nil)], activityID: id)
-        _ = try await f.repository.pause(id: id)
-        f.clock.set(62_000)
-        _ = try await f.repository.resume(id: id)
-        _ = try await f.repository.append([point(62_001)], activityID: id)
-        _ = try await f.repository.pause(id: id)
-        _ = try await f.repository.finish(id: id)
+        let track = GPXTrack(segments: [
+            GPXSegment(points: [point(1_001), point(61_001, longitude: 11.001, elevationMeters: nil)]),
+            GPXSegment(points: [point(62_001)])
+        ])
+        let id = try #require(try await f.repository.importTracks([track]).imported.first?.id)
         let original = try await f.repository.recordedTrack(id: id).gpx
         #expect(original.segments.count == 2)
         #expect(try await f.repository.geometry(id: id).sections.count == 2)
@@ -205,7 +202,7 @@ struct ActivityRepositoryTests {
         let f = try await Fixture.create()
         let id = try await f.repository.start().id
         _ = try await f.repository.append([point(1_001)], activityID: id)
-        _ = try await f.repository.pause(id: id)
+        _ = try await f.repository.stop(id: id)
         _ = try await f.repository.finish(id: id)
         let native = try await f.repository.recordedTrack(id: id).gpx
         let another = GPXTrack(segments: [GPXSegment(points: [point(3_001)])])
@@ -253,25 +250,26 @@ struct ActivityRepositoryTests {
         #expect(try await f.repository.importTracks([track]).imported.count == 1)
     }
 
-    @Test func lifecycleSurvivesReopeningAndPreservesPauseBoundaries() async throws {
+    @Test func lifecycleSurvivesReopeningAndPreservesStopTime() async throws {
         let f = try await Fixture.create()
         let start = try await f.repository.start()
         #expect(try await f.repository.start().id == start.id)
         _ = try await f.repository.append([point(1_001)], activityID: start.id)
         f.clock.set(1_005)
-        _ = try await f.repository.pause(id: start.id)
+        _ = try await f.repository.stop(id: start.id)
         let reopened = try await ActivityRepository.open(url: f.directory.appendingPathComponent("test.store"), clock: f.clock.now)
-        #expect(try await reopened.active()?.phase == .paused)
+        #expect(try await reopened.active()?.phase == .stopped)
         #expect(try await reopened.active()?.summary.pointCount == 1)
+        #expect(try await reopened.active()?.recordingStoppedAt == 1_005)
         f.clock.set(1_010)
-        _ = try await reopened.resume(id: start.id)
-        _ = try await reopened.append([point(1_011)], activityID: start.id)
-        _ = try await reopened.pause(id: start.id)
+        _ = try await reopened.append([point(1_003)], activityID: start.id)
+        _ = try await reopened.stop(id: start.id)
         let saved = try await reopened.finish(id: start.id)
         #expect(saved.pointCount == 2)
+        #expect(saved.completedAt == 1_005)
         #expect(try await reopened.active() == nil)
         let details = try await reopened.details(id: start.id)
-        #expect(details.geometry.sections.count == 2)
+        #expect(details.geometry.sections.count == 1)
         #expect(ActivityStatistics(activity: details.activity, geometry: details.geometry).distanceMeters == 0)
         #expect(try await reopened.summaries().map(\.id) == [start.id])
     }
@@ -289,16 +287,14 @@ struct ActivityRepositoryTests {
         #expect(route.sections.flatMap(\.points).map(\.timestampMilliseconds) == [1_001])
     }
 
-    @Test func pauseAcceptsQueuedPointsButRejectsOutsideTheInterval() async throws {
+    @Test func stopAcceptsQueuedPointsButRejectsOutsideTheInterval() async throws {
         let f = try await Fixture.create()
         let id = try await f.repository.start().id
         f.clock.set(1_010)
-        _ = try await f.repository.pause(id: id)
+        _ = try await f.repository.stop(id: id)
         _ = try await f.repository.append([point(1_005)], activityID: id)
         await #expect(throws: ActivityError.self) { try await f.repository.append([point(1_011)], activityID: id) }
-        f.clock.set(1_020)
-        _ = try await f.repository.resume(id: id)
-        await #expect(throws: ActivityError.self) { try await f.repository.append([point(1_015)], activityID: id) }
+        await #expect(throws: ActivityError.self) { try await f.repository.append([point(999)], activityID: id) }
         #expect(try await f.repository.active()?.summary.pointCount == 1)
     }
 
@@ -315,7 +311,7 @@ struct ActivityRepositoryTests {
         let f = try await Fixture.create()
         let id = try await f.repository.start().id
         _ = try await f.repository.append([point(1_001)], activityID: id)
-        _ = try await f.repository.pause(id: id)
+        _ = try await f.repository.stop(id: id)
         try await f.repository.discard(id: id)
         #expect(try await f.repository.active() == nil)
         #expect(try await f.repository.summaries().isEmpty)
@@ -325,11 +321,11 @@ struct ActivityRepositoryTests {
     @Test func deletingAnActivityPreservesItsNeighbours() async throws {
         let f = try await Fixture.create()
         let first = try await f.repository.start().id
-        _ = try await f.repository.pause(id: first)
+        _ = try await f.repository.stop(id: first)
         _ = try await f.repository.finish(id: first)
         let second = try await f.repository.start().id
         _ = try await f.repository.append([point(1_001)], activityID: second)
-        _ = try await f.repository.pause(id: second)
+        _ = try await f.repository.stop(id: second)
         _ = try await f.repository.finish(id: second)
         try await f.repository.delete(id: first)
         #expect(try await f.repository.summaries().map(\.id) == [second])
