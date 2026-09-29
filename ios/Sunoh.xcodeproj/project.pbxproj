@@ -29,13 +29,6 @@
 			remoteGlobalIDString = 2889364A2F0E3CAE008C54C9;
 			remoteInfo = app;
 		};
-		C03000000000000000000003 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 288936432F0E3CAE008C54C9 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 2889364A2F0E3CAE008C54C9;
-			remoteInfo = app;
-		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -61,7 +54,6 @@
 		2889364B2F0E3CAE008C54C9 /* Sunoh.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Sunoh.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C01000000000000000000001 /* SunohTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = SunohTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C02000000000000000000001 /* Configuration/App.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Configuration/App.xcconfig; sourceTree = "<group>"; };
-		C03000000000000000000001 /* SunohUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = SunohUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -108,11 +100,6 @@
 			path = tests;
 			sourceTree = "<group>";
 		};
-		C03000000000000000000002 /* ui-tests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = "ui-tests";
-			sourceTree = "<group>";
-		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -140,13 +127,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		C03000000000000000000006 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -167,7 +147,6 @@
 				282529DB2F4EE546001088C7 /* DebugRoute.gpx */,
 				2889364D2F0E3CAE008C54C9 /* app */,
 				C01000000000000000000002 /* tests */,
-				C03000000000000000000002 /* ui-tests */,
 				280FDD102F54A68300512F42 /* live-activity */,
 				28F00A032F5A000100AA5058 /* shared */,
 				28255AD52F4EE9A4001088C7 /* Frameworks */,
@@ -180,7 +159,6 @@
 			children = (
 				2889364B2F0E3CAE008C54C9 /* Sunoh.app */,
 				C01000000000000000000001 /* SunohTests.xctest */,
-				C03000000000000000000001 /* SunohUITests.xctest */,
 				280FDD0B2F54A68300512F42 /* live-activity.appex */,
 			);
 			name = Products;
@@ -262,29 +240,6 @@
 			productReference = C01000000000000000000001 /* SunohTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		C03000000000000000000008 /* SunohUITests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = C03000000000000000000009 /* Build configuration list for PBXNativeTarget "SunohUITests" */;
-			buildPhases = (
-				C03000000000000000000005 /* Sources */,
-				C03000000000000000000006 /* Frameworks */,
-				C03000000000000000000007 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				C03000000000000000000004 /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				C03000000000000000000002 /* ui-tests */,
-			);
-			name = SunohUITests;
-			packageProductDependencies = (
-			);
-			productName = SunohUITests;
-			productReference = C03000000000000000000001 /* SunohUITests.xctest */;
-			productType = "com.apple.product-type.bundle.ui-testing";
-		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -324,7 +279,6 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				C03000000000000000000008 /* SunohUITests */,
 				C01000000000000000000008 /* SunohTests */,
 				2889364A2F0E3CAE008C54C9 /* Sunoh */,
 				280FDD0A2F54A68300512F42 /* live-activity */,
@@ -349,13 +303,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		C01000000000000000000007 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		C03000000000000000000007 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -411,13 +358,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		C03000000000000000000005 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -430,11 +370,6 @@
 			isa = PBXTargetDependency;
 			target = 2889364A2F0E3CAE008C54C9 /* Sunoh */;
 			targetProxy = C01000000000000000000003 /* PBXContainerItemProxy */;
-		};
-		C03000000000000000000004 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 2889364A2F0E3CAE008C54C9 /* Sunoh */;
-			targetProxy = C03000000000000000000003 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -771,50 +706,6 @@
 			};
 			name = Release;
 		};
-		C03000000000000000000010 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.samuel.sunoh.uitests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SWIFT_STRICT_CONCURRENCY = complete;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = 1;
-				TEST_TARGET_NAME = Sunoh;
-			};
-			name = Debug;
-		};
-		C03000000000000000000011 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@loader_path/Frameworks",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.samuel.sunoh.uitests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SWIFT_STRICT_CONCURRENCY = complete;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = 1;
-				TEST_TARGET_NAME = Sunoh;
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -850,15 +741,6 @@
 			buildConfigurations = (
 				C01000000000000000000010 /* Debug */,
 				C01000000000000000000011 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		C03000000000000000000009 /* Build configuration list for PBXNativeTarget "SunohUITests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				C03000000000000000000010 /* Debug */,
-				C03000000000000000000011 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

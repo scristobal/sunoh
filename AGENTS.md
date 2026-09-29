@@ -65,6 +65,11 @@ Sunō is a ski and snowboard tracking app that encourages exploration and person
 - Make only requested changes. Explain additional concerns and the options, including leaving them unchanged, and wait for a decision before implementing a remedy.
 - Honor explicit deferrals and retain the outstanding requirement.
 
+## Tests
+
+- During the fast iteration phase, persist tests only for geomatching and pure computations over tracks and geometries. Do not persist UI or UX tests while those behaviors are changing and regressions are expected.
+- Use temporary tests during development when they help verify correctness or debug an issue. Run them and remove them before finishing unless they belong to the retained computation coverage.
+
 ## Version control
 
 - Always use SSH for Git remotes.

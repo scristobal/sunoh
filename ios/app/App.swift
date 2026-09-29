@@ -41,25 +41,10 @@ import UIKit
     }
 
     private func openDatabase() async {
-        #if DEBUG
-        if UITestFixture.scenario == "startup-error" {
-            startup = .failed("Sunō could not open the activity store. Your existing recordings have not been changed. Restart the app and try again.")
-            return
-        }
-        #endif
         switch startup { case .opening, .ready: return; case .idle, .failed: break }
         startup = .opening
         do {
-            let repository: ActivityRepository
-            #if DEBUG
-            if UITestFixture.scenario != nil {
-                repository = try await UITestFixture.repository()
-            } else {
-                repository = try await ActivityRepository.open()
-            }
-            #else
-            repository = try await ActivityRepository.open()
-            #endif
+            let repository = try await ActivityRepository.open()
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--seed") {
                 UIApplication.shared.isIdleTimerDisabled = true
@@ -94,16 +79,7 @@ import UIKit
             recorder.onCompleted = { [weak library] activity in await library?.didComplete(activity) }
             library.onStorageFailure = { [weak recorder] error in recorder?.reportStorageFailure(error) }
             try await recorder.restore()
-            #if DEBUG
-            if UITestFixture.scenario == "storage-error" {
-                recorder.reportStorageFailure(.storage("The activity store could not be opened. Your saved recordings are still on this device."))
-            }
-            #endif
-            #if DEBUG
-            let location = LocationTracker(manager: UITestFixture.locationManager(), onPoints: recorder.record)
-            #else
             let location = LocationTracker(onPoints: recorder.record)
-            #endif
             startup = .ready(Ready(recorder: recorder, library: library, location: location))
             liveActivity.startObserving(recorder: recorder, location: location)
             location.activate()

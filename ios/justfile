@@ -33,7 +33,7 @@ run: build
     xcrun simctl launch {{ quote(PHONE_UDID) }} {{ quote(BUNDLE_ID) }}
     python3 scripts/simulator.py --open
 
-# Run tests; pass -only-testing:SunohTests to run only unit tests.
+# Run the retained track and geometry computation tests.
 test *args: phone
     xcodebuild -project {{ quote(PROJECT) }} -scheme {{ quote(SCHEME) }} -destination {{ quote("id=" + PHONE_UDID) }} -derivedDataPath {{ quote(DERIVED) }} -parallel-testing-enabled NO "$@" test
 

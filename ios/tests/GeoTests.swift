@@ -3,6 +3,28 @@ import Testing
 @testable import Sunoh
 
 struct GeoTests {
+    @Test func continuityPreservesSourceBoundariesWithoutSplittingLongSampleIntervals() throws {
+        let points = try [0, 30_000, 60_001].map {
+            try TrackPoint(timestampMilliseconds: Int64($0), latitude: 47, longitude: 11 + Double($0) / 1_000_000, elevationMeters: nil)
+        }
+        let source = fixtureTrack([GPXSegment(points: points), GPXSegment(points: [try TrackPoint(timestampMilliseconds: 60_002,
+            latitude: 48, longitude: 12, elevationMeters: 900)])])
+        let geometry = TrackContinuityPolicy.geometry(for: source)
+        #expect(source.segments.count == 2)
+        #expect(geometry.sections.map { $0.points.count } == [3, 1])
+        #expect(geometry.sections.map(\.breakBefore) == [nil, .sourceBoundary])
+        #expect(geometry.sections[0].sourceSegmentID != geometry.sections[1].sourceSegmentID)
+        #expect(geometry.sections.map(\.points) == source.segments.map(\.points))
+    }
+
+    @Test func invalidObservationsCannotEnterTheDomainEvenThroughDecoding() throws {
+        #expect(throws: ActivityError.self) { try Coordinate(latitude: 91, longitude: 10) }
+        #expect(throws: ActivityError.self) { try TrackPoint(timestampMilliseconds: -1, latitude: 47, longitude: 11, elevationMeters: nil) }
+        #expect(throws: ActivityError.self) { try TrackPoint(timestampMilliseconds: 1, latitude: 47, longitude: 11, elevationMeters: .infinity) }
+        let encoded = Data(#"{"recordedAt":{"millisecondsSince1970":1},"coordinate":{"latitude":47,"longitude":181}}"#.utf8)
+        #expect(throws: ActivityError.self) { try JSONDecoder().decode(TrackPoint.self, from: encoded) }
+    }
+
     @Test func greatCircleDistanceUsesTheShortPathAcrossTheAntimeridian() throws {
         let west = try Coordinate(latitude: 0, longitude: 179.99)
         let east = try Coordinate(latitude: 0, longitude: -179.99)

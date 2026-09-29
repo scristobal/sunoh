@@ -29,7 +29,7 @@
 - Persist statistics and route thumbnails together as derived results. Keep them consistent with the source and rebuild missing or outdated results without losing the recording.
 - Failures in history loading, analysis or previews must not stop healthy recording. Keep original activity details usable when derived work fails.
 - Export what the recorder provided: timestamps, coordinates, optional recorded elevation and segment boundaries. Do not substitute calculated statistics or inferred samples. Sharing previews must not change the exported recording.
-- Preserve existing recordings during data exchange and keep history responsive as it grows. Detailed import and export behavior belongs in executable checks.
+- Preserve existing recordings during data exchange and keep history responsive as it grows.
 - Use GPX as the external format for development track seeds. Keep app-specific storage fields out of seed files.
 - Always seed simulators and development installations from the original Slopes exports for the 2025/2026 season, defined as July 1, 2025 through June 30, 2026, unless the user explicitly requests another source or season. Preserve raw observations and let Sunō derive activity analysis.
 - Keep original development data in ignored local storage so development workflows do not require an external volume. Keep original seed archives separate from disposable generated GPX files and their verification manifest; never fall back to another dataset or an unverified cache.
@@ -55,7 +55,8 @@
 
 ## Validation
 
-- After behavior changes, run the repository's test workflow and build, install and launch the app through its supported development workflow.
+- Run the retained computation tests when changing track or geometry calculations.
+- After app behavior changes, build, install and launch the app through its supported development workflow.
 - Discover the selected simulator or device at runtime. Do not assume a device identity, model or screen geometry.
 - Verify visible interactions on a running simulator or device. Exercise affected states and native system presentations; a successful build alone does not establish that they work.
 - No not perform any accessibility audit nor checks, including but not limited to text size, VoiceOver visibility, reachability it, unless the user explicitly requests them.

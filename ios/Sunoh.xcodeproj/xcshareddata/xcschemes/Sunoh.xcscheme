@@ -40,16 +40,6 @@
                ReferencedContainer = "container:Sunoh.xcodeproj">
             </BuildableReference>
          </TestableReference>
-         <TestableReference
-            skipped = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "C03000000000000000000008"
-               BuildableName = "SunohUITests.xctest"
-               BlueprintName = "SunohUITests"
-               ReferencedContainer = "container:Sunoh.xcodeproj">
-            </BuildableReference>
-         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction
