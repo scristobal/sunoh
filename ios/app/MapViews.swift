@@ -459,7 +459,6 @@ final class MapViewStore {
                 line.lineWidth = .constant(2.5)
                 line.lineCap = .constant(.round)
                 line.lineJoin = .constant(.round)
-                line.lineDasharray = .constant([0, 2])
                 try mapboxMap.addLayer(line)
             }
         } catch {
