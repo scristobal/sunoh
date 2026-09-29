@@ -57,6 +57,7 @@ struct ActivityElevationProfile: View {
         guard let minimum = profile.minimumElevationMeters, let maximum = profile.maximumElevationMeters,
               size.width > 2, size.height > 2 else { return }
         let bounds = CGRect(origin: .zero, size: size).insetBy(dx: 1, dy: 1)
+        let trackColor = Color(uiColor: ActivityTrackStyle.color)
         let scale = max(abs(minimum), abs(maximum), 1)
         let range = maximum / scale - minimum / scale
         func position(_ sample: ActivityElevationProfileData.Sample) -> CGPoint {
@@ -73,7 +74,7 @@ struct ActivityElevationProfile: View {
             guard let first = section.first, let last = section.last else { continue }
             let start = position(first)
             if section.count == 1 {
-                context.fill(Path(ellipseIn: CGRect(x: start.x - 1.5, y: start.y - 1.5, width: 3, height: 3)), with: .color(.blue))
+                context.fill(Path(ellipseIn: CGRect(x: start.x - 1.5, y: start.y - 1.5, width: 3, height: 3)), with: .color(trackColor))
                 continue
             }
             var line = Path()
@@ -83,9 +84,9 @@ struct ActivityElevationProfile: View {
             fill.addLine(to: CGPoint(x: position(last).x, y: bounds.maxY))
             fill.addLine(to: CGPoint(x: start.x, y: bounds.maxY))
             fill.closeSubpath()
-            context.fill(fill, with: .linearGradient(Gradient(colors: [.blue.opacity(0.18), .blue.opacity(0.02)]),
+            context.fill(fill, with: .linearGradient(Gradient(colors: [trackColor.opacity(0.18), trackColor.opacity(0.02)]),
                                                      startPoint: CGPoint(x: 0, y: bounds.minY), endPoint: CGPoint(x: 0, y: bounds.maxY)))
-            context.stroke(line, with: .color(.blue), style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+            context.stroke(line, with: .color(trackColor), style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
         }
     }
 

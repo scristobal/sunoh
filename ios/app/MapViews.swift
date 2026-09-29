@@ -318,11 +318,11 @@ final class MapViewStore {
 
     private var trackFeatures: [Feature] = []
 
-    private static let trackColours: [(kind: String, colour: UIColor)] = [
-        (TrackClassification.run.rawValue, .systemBlue),
-        (TrackClassification.lift.rawValue, .systemGreen),
-        ("pending", .systemGray),
-        ("live", .systemPurple)
+    private static let trackKinds = [
+        TrackClassification.run.rawValue,
+        TrackClassification.lift.rawValue,
+        "pending",
+        "live"
     ]
 
     /// Center once on the first usable fix, and again after permission is restored.
@@ -446,20 +446,20 @@ final class MapViewStore {
             try mapboxMap.addSource(source)
 
             var casing = LineLayer(id: "user-track-casing", source: source.id)
-            casing.lineColor = .constant(StyleColor(.white))
-            casing.lineWidth = .constant(5)
+            casing.lineColor = .constant(StyleColor(ActivityTrackStyle.outlineColor))
+            casing.lineWidth = .constant(4.5)
             casing.lineCap = .constant(.round)
             casing.lineJoin = .constant(.round)
             try mapboxMap.addLayer(casing)
 
-            for (kind, colour) in Self.trackColours {
+            for kind in Self.trackKinds {
                 var line = LineLayer(id: "user-track-\(kind)", source: source.id)
                 line.filter = Exp(.eq) { Exp(.get) { "classification" }; kind }
-                line.lineColor = .constant(StyleColor(colour))
-                line.lineWidth = .constant(3)
+                line.lineColor = .constant(StyleColor(ActivityTrackStyle.color))
+                line.lineWidth = .constant(2.5)
                 line.lineCap = .constant(.round)
                 line.lineJoin = .constant(.round)
-                line.lineDasharray = .constant([2, 1.5])
+                line.lineDasharray = .constant([0, 2])
                 try mapboxMap.addLayer(line)
             }
         } catch {

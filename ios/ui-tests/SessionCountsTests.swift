@@ -51,12 +51,12 @@ import XCTest
         assertSteepness(in: overview, run: "15.4%", steepestRun: "27.8%")
         assertMetrics([("Runs", "2")], in: overview)
         assertRemovedMetrics(in: overview)
-        capture(app, name: "Classified overview map with blue outside-lift routes and a green lift")
+        capture(app, name: "Classified overview map with blue runs and lifts")
         app.buttons["open-activity-map"].tap()
         XCTAssertTrue(app.buttons["close-activity-details"].waitForExistence(timeout: 10))
         capture(app, name: "Full screen map opens with compact details")
         guard try resizeMapDetailsSheet(app, compact: true) else { return }
-        capture(app, name: "Classified map with blue runs including the traverse, a green lift, recording breaks and no singleton")
+        capture(app, name: "Classified map with blue runs and lifts, recording breaks and no singleton")
         guard try resizeMapDetailsSheet(app, compact: false) else { return }
         assertMapHasNoAggregates(app)
         let card = app.descendants(matching: .any).matching(identifier: "activity-section-card").firstMatch
