@@ -1,52 +1,8 @@
 import Foundation
 import MapboxMaps
 
-enum MapStyle: String, Identifiable {
-    case blueSnow
-    case sunoh
-    case mapboxStandard
-    case custom
-
-    static let preferenceKey = "mapStyle"
-    static let presets: [MapStyle] = [.blueSnow, .sunoh, .mapboxStandard]
-
-    var id: String { rawValue }
-
-    var name: String {
-        switch self {
-        case .blueSnow: "Blue Snow"
-        case .sunoh: "Sunō"
-        case .mapboxStandard: "Standard"
-        case .custom: "Custom"
-        }
-    }
-
-    @MainActor var styleURI: StyleURI {
-        let id: String
-        switch self {
-        case .blueSnow: id = "cmuixgnck000h01s979mi0gyt"
-        case .sunoh: id = "cmuirfc4w006y01s3c1cgboyz"
-        case .mapboxStandard: id = "cmujk5k4i001a01s91xrxdmiz"
-        case .custom: return MapService.styleURI
-        }
-        return StyleURI(rawValue: "mapbox://styles/el-tobal/\(id)")!
-    }
-
-    @MainActor static var defaultSelection: MapStyle {
-        defaultSelection(for: MapService.styleURI)
-    }
-
-    @MainActor static func defaultSelection(for styleURI: StyleURI) -> MapStyle {
-        presets.first { $0.styleURI == styleURI } ?? .custom
-    }
-
-    @MainActor static func options(including selection: MapStyle) -> [MapStyle] {
-        presets + (defaultSelection == .custom || selection == .custom ? [.custom] : [])
-    }
-}
-
 @MainActor enum MapService {
-    static let defaultStyleURI = MapStyle.blueSnow.styleURI
+    static let defaultStyleURI = StyleURI(rawValue: "mapbox://styles/el-tobal/cmuixgnck000h01s979mi0gyt")!
 
     static let styleURI = resolvedStyleURI(
         Bundle.main.object(forInfoDictionaryKey: "SunohMapStyleURL") as? String

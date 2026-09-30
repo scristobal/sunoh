@@ -72,7 +72,6 @@ class ActivityMapView: MapView {
 }
 
 struct StaticMapViewRepresentable: UIViewRepresentable {
-    @AppStorage(MapStyle.preferenceKey) private var selectedStyle = MapStyle.defaultSelection
     let map: MapViewStore
     let geometry: TrackGeometry
     let passages: SkiActivityDetector.Result?
@@ -83,7 +82,7 @@ struct StaticMapViewRepresentable: UIViewRepresentable {
     var fliesToChanges = false
 
     func makeUIView(context: Context) -> ActivityMapView {
-        let mapView = ActivityMapView(frame: .zero, mapInitOptions: mapInitOptions(style: selectedStyle))
+        let mapView = ActivityMapView(frame: .zero, mapInitOptions: mapInitOptions())
         mapView.maximumZoomLevel = maximumZoomLevel
         mapView.location.options.puckType = nil
         mapView.ornaments.options.compass.visibility = .hidden
@@ -98,10 +97,6 @@ struct StaticMapViewRepresentable: UIViewRepresentable {
 
     func updateUIView(_ mapView: ActivityMapView, context: Context) {
         mapView.maximumZoomLevel = maximumZoomLevel
-        if mapView.mapboxMap.styleURI != selectedStyle.styleURI {
-            context.coordinator.prepareForStyleChange()
-            mapView.mapboxMap.styleURI = selectedStyle.styleURI
-        }
         context.coordinator.update(geometry: geometry, passages: passages, obscuredBottom: obscuredBottom, safeTop: safeTop,
                                    contextPadding: contextPadding, fliesToChanges: fliesToChanges)
         context.coordinator.fitTrackIfNeeded(in: mapView)
@@ -175,11 +170,6 @@ struct StaticMapViewRepresentable: UIViewRepresentable {
             if mapView.mapboxMap.isStyleLoaded { styleDidLoad(in: mapView) }
         }
 
-        func prepareForStyleChange() {
-            hasLoadedStyle = false
-            cancelPendingFit()
-        }
-
         func styleDidLoad(in mapView: ActivityMapView) {
             map.updateSessionTrack(geometry, passages: passages)
             hasLoadedStyle = true
@@ -251,32 +241,23 @@ enum ActivityMapViewport {
 // MARK: - Live Map (record mode — with user location + following)
 
 struct MapViewRepresentable: UIViewRepresentable {
-    @AppStorage(MapStyle.preferenceKey) private var selectedStyle = MapStyle.defaultSelection
     let map: MapViewStore
     let hasLocationPermission: Bool
     let userCoordinate: CLLocationCoordinate2D?
 
     func makeUIView(context: Context) -> ActivityMapView {
-        let mapView = map.mapView ?? ActivityMapView(frame: .zero, mapInitOptions: mapInitOptions(style: selectedStyle))
+        let mapView = map.mapView ?? ActivityMapView(frame: .zero, mapInitOptions: mapInitOptions())
         mapView.maximumZoomLevel = 14
         mapView.ornaments.options.compass.visibility = .hidden
         mapView.ornaments.options.scaleBar.visibility = .hidden
         map.mapView = mapView
         context.coordinator.observeStyle(in: mapView)
-        updateStyle(in: mapView)
         map.updateUserLocation(hasPermission: hasLocationPermission, coordinate: userCoordinate)
         return mapView
     }
 
     func updateUIView(_ mapView: ActivityMapView, context: Context) {
-        updateStyle(in: mapView)
         map.updateUserLocation(hasPermission: hasLocationPermission, coordinate: userCoordinate)
-    }
-
-    private func updateStyle(in mapView: ActivityMapView) {
-        if mapView.mapboxMap.styleURI != selectedStyle.styleURI {
-            mapView.mapboxMap.styleURI = selectedStyle.styleURI
-        }
     }
 
     static func dismantleUIView(_ mapView: ActivityMapView, coordinator: Coordinator) {
@@ -304,9 +285,9 @@ struct MapViewRepresentable: UIViewRepresentable {
     }
 }
 
-@MainActor private func mapInitOptions(style: MapStyle) -> MapInitOptions {
+@MainActor private func mapInitOptions() -> MapInitOptions {
     MapService.configure()
-    return MapInitOptions(cameraOptions: CameraOptions(zoom: 14, bearing: 0, pitch: 0), styleURI: style.styleURI)
+    return MapInitOptions(cameraOptions: CameraOptions(zoom: 14, bearing: 0, pitch: 0), styleURI: MapService.styleURI)
 }
 
 // MARK: - Map state
