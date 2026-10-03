@@ -98,8 +98,7 @@ struct OfflineStatusMap: UIViewRepresentable {
         // and areas still downloading lose their veil as the download progresses.
         private func updateCoverage() {
             guard !isPreview else {
-                features = FeatureCollection(features: [])
-                outlines = FeatureCollection(features: [])
+                (features, outlines) = (preview.features, preview.outlines)
                 return
             }
             var completion: [OfflineTile: Double] = [:]
@@ -118,22 +117,37 @@ struct OfflineStatusMap: UIViewRepresentable {
                     completion[pack] = max(completion[pack] ?? 0, completed)
                 }
             }
-            let veiled = OfflineTileGrid.complement(of: Set(completion.keys)).map { ($0, 1.0) }
-                + completion.filter { $0.value < 1 }.sorted { $0.key.id < $1.key.id }.map { ($0.key, 1 - $0.value) }
-            features = FeatureCollection(features: veiled.map { tile, veil in
+            features = Self.veil(OfflineTileGrid.complement(of: Set(completion.keys)).map { ($0, 1.0) }
+                + completion.filter { $0.value < 1 }.sorted { $0.key.id < $1.key.id }.map { ($0.key, 1 - $0.value) })
+            outlines = Self.outline(OfflineTileGrid.outline(of: Set(completion.filter { $0.value >= 1 }.keys)))
+        }
+
+        // The preview veils everything outside the resort's padded boundary. Tracing that boundary on a fine grid
+        // keeps the outline inside the preview's close framing, unlike the download area, which extends much further.
+        private lazy var preview: (features: FeatureCollection, outlines: FeatureCollection, frame: [CLLocationCoordinate2D]) = {
+            guard let focus = self.focus else { return (FeatureCollection(features: []), FeatureCollection(features: []), []) }
+            let cells = OfflineTileGrid.tiles(covering: focus.rings, zoom: Self.previewZoom)
+            let rings = OfflineTileGrid.outline(of: cells, zoom: Self.previewZoom)
+            return (Self.veil(OfflineTileGrid.complement(of: cells, zoom: Self.previewZoom).map { ($0, 1.0) }),
+                    Self.outline(rings), rings.flatMap { $0.map(\.coordinate) })
+        }()
+
+        private static let veilOpacity = 0.8
+        private static let previewZoom = 16
+
+        private static func veil(_ tiles: [(OfflineTile, Double)]) -> FeatureCollection {
+            FeatureCollection(features: tiles.map { tile, amount in
                 var feature = Feature(geometry: tile.geometry)
                 feature.identifier = .string(tile.id)
-                feature.properties = ["opacity": .number(Self.veilOpacity * veil)]
+                feature.properties = ["opacity": .number(veilOpacity * amount)]
                 return feature
-            })
-            // Line layers draw polygon rings as closed lines, so the corner where a ring starts gets a proper join.
-            let downloaded = Set(completion.filter { $0.value >= 1 }.keys)
-            outlines = FeatureCollection(features: OfflineTileGrid.outline(of: downloaded).map { ring in
-                Feature(geometry: .polygon(Polygon([ring.map(\.coordinate)])))
             })
         }
 
-        private static let veilOpacity = 0.8
+        // Line layers draw polygon rings as closed lines, so the corner where a ring starts gets a proper join.
+        private static func outline(_ rings: [[OfflineTileGrid.Corner]]) -> FeatureCollection {
+            FeatureCollection(features: rings.map { Feature(geometry: .polygon(Polygon([$0.map(\.coordinate)]))) })
+        }
 
         func render() {
             guard let map, map.mapboxMap.isStyleLoaded else { return }
@@ -210,7 +224,7 @@ struct OfflineStatusMap: UIViewRepresentable {
             }
             if let focus, map.bounds.width > 0, map.bounds.height > 0, framedSize != map.bounds.size {
                 do {
-                    let camera = try map.mapboxMap.camera(for: focus.coordinates,
+                    let camera = try map.mapboxMap.camera(for: preview.frame.isEmpty ? focus.coordinates : preview.frame,
                         camera: CameraOptions(bearing: 0, pitch: 0), coordinatesPadding: UIEdgeInsets(top: 24, left: 24, bottom: 24, right: 24), maxZoom: 16, offset: nil)
                     framedSize = map.bounds.size
                     map.mapboxMap.setCamera(to: camera)

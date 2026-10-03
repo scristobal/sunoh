@@ -16,13 +16,16 @@ struct OfflineRegion: Identifiable, Codable, Sendable {
 
     var center: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: centerLatitude, longitude: centerLongitude) }
 
-    var coordinates: [CLLocationCoordinate2D] {
+    /// The outer rings and holes of every polygon in the padded boundary.
+    var rings: [[CLLocationCoordinate2D]] {
         switch geometry {
-        case .polygon(let polygon): polygon.coordinates.flatMap { $0 }
-        case .multiPolygon(let polygons): polygons.coordinates.flatMap { $0.flatMap { $0 } }
+        case .polygon(let polygon): polygon.coordinates
+        case .multiPolygon(let polygons): polygons.coordinates.flatMap { $0 }
         default: []
         }
     }
+
+    var coordinates: [CLLocationCoordinate2D] { rings.flatMap { $0 } }
 
     static func nearestFirst(_ regions: [OfflineRegion], from origin: Coordinate) -> [OfflineRegion] {
         let distances: [(region: OfflineRegion, meters: Double)] = regions.map { region in

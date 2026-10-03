@@ -60,13 +60,13 @@ enum OfflineTileGrid {
     // The finest pack footprint required for Blue Snow 3D's offline zoom range 0...16.
     static let coverageIndexZoom = 12
 
-    /// The fewest tiles that cover the world outside the given packs without overlapping each other or the packs.
-    static func complement(of packs: Set<OfflineTile>) -> [OfflineTile] {
-        let packs = packs.filter { $0.zoom == coverageIndexZoom }
-        let ancestors = Set(packs.flatMap { pack in (0..<coverageIndexZoom).compactMap { pack.parent(atZoom: $0) } })
+    /// The fewest tiles that cover the world outside the given tiles at one zoom without overlapping each other or them.
+    static func complement(of covered: Set<OfflineTile>, zoom: Int = coverageIndexZoom) -> [OfflineTile] {
+        let covered = covered.filter { $0.zoom == zoom }
+        let ancestors = Set(covered.flatMap { tile in (0..<zoom).compactMap { tile.parent(atZoom: $0) } })
         var tiles: [OfflineTile] = []
         func cover(_ tile: OfflineTile) {
-            guard !packs.contains(tile) else { return }
+            guard !covered.contains(tile) else { return }
             guard ancestors.contains(tile) else {
                 tiles.append(tile)
                 return
@@ -81,26 +81,28 @@ enum OfflineTileGrid {
         return tiles
     }
 
-    /// A corner of the pack grid. The pack at x and y has its north-west corner at the same x and y.
+    /// A corner of the tile grid at one zoom. The tile at x and y has its north-west corner at the same x and y.
     struct Corner: Hashable, Sendable {
         let x: Int
         let y: Int
-        var coordinate: CLLocationCoordinate2D { OfflineTile.coordinate(x: x, y: y, zoom: coverageIndexZoom) }
+        var zoom = OfflineTileGrid.coverageIndexZoom
+        var coordinate: CLLocationCoordinate2D { OfflineTile.coordinate(x: x, y: y, zoom: zoom) }
     }
 
-    /// The closed rings that outline the area the packs cover, including the edges of holes,
-    /// with each straight run of pack sides merged into one edge.
-    static func outline(of packs: Set<OfflineTile>) -> [[Corner]] {
-        let covered = Set(packs.filter { $0.zoom == coverageIndexZoom }.map { Corner(x: $0.x, y: $0.y) })
-        // Every pack side that faces an uncovered neighbor is part of the outline. The sides run clockwise
-        // around their pack, so the covered area is on the right of each ring.
+    /// The closed rings that outline the area the tiles at one zoom cover, including the edges of holes,
+    /// with each straight run of tile sides merged into one edge.
+    static func outline(of tiles: Set<OfflineTile>, zoom: Int = coverageIndexZoom) -> [[Corner]] {
+        func corner(_ x: Int, _ y: Int) -> Corner { Corner(x: x, y: y, zoom: zoom) }
+        let covered = Set(tiles.filter { $0.zoom == zoom }.map { corner($0.x, $0.y) })
+        // Every tile side that faces an uncovered neighbor is part of the outline. The sides run clockwise
+        // around their tile, so the covered area is on the right of each ring.
         var edges: [Edge] = []
-        for pack in covered.sorted(by: { ($0.y, $0.x) < ($1.y, $1.x) }) {
-            let (x, y) = (pack.x, pack.y)
-            if !covered.contains(Corner(x: x, y: y - 1)) { edges.append(Edge(Corner(x: x, y: y), Corner(x: x + 1, y: y))) }
-            if !covered.contains(Corner(x: x + 1, y: y)) { edges.append(Edge(Corner(x: x + 1, y: y), Corner(x: x + 1, y: y + 1))) }
-            if !covered.contains(Corner(x: x, y: y + 1)) { edges.append(Edge(Corner(x: x + 1, y: y + 1), Corner(x: x, y: y + 1))) }
-            if !covered.contains(Corner(x: x - 1, y: y)) { edges.append(Edge(Corner(x: x, y: y + 1), Corner(x: x, y: y))) }
+        for tile in covered.sorted(by: { ($0.y, $0.x) < ($1.y, $1.x) }) {
+            let (x, y) = (tile.x, tile.y)
+            if !covered.contains(corner(x, y - 1)) { edges.append(Edge(corner(x, y), corner(x + 1, y))) }
+            if !covered.contains(corner(x + 1, y)) { edges.append(Edge(corner(x + 1, y), corner(x + 1, y + 1))) }
+            if !covered.contains(corner(x, y + 1)) { edges.append(Edge(corner(x + 1, y + 1), corner(x, y + 1))) }
+            if !covered.contains(corner(x - 1, y)) { edges.append(Edge(corner(x, y + 1), corner(x, y))) }
         }
         var outgoing: [Corner: [Int]] = [:]
         for (index, edge) in edges.enumerated() { outgoing[edge.start, default: []].append(index) }
@@ -113,7 +115,7 @@ enum OfflineTileGrid {
                 used[current] = true
                 let edge = edges[current]
                 ring.append(edge.end)
-                // Where two packs touch only at a corner, turning right keeps each ring around its own pack.
+                // Where two tiles touch only at a corner, turning right keeps each ring around its own tile.
                 guard edge.end != edges[first].start,
                       let next = outgoing[edge.end]?.filter({ !used[$0] })
                           .max(by: { edge.turn(to: edges[$0]) < edge.turn(to: edges[$1]) }) else { break }
@@ -150,5 +152,73 @@ enum OfflineTileGrid {
             return direction(previous, corners[index]) != direction(corners[index], next)
         }.map { corners[$0] }
         return turns.isEmpty ? ring : turns + [turns[0]]
+    }
+
+    /// The tiles at a zoom that overlap the polygons formed by the rings, by the even-odd rule.
+    /// Tiles that a ring only touches along a side or at a corner may be included.
+    static func tiles(covering rings: [[CLLocationCoordinate2D]], zoom: Int) -> Set<OfflineTile> {
+        let scale = Double(1 << zoom)
+        let projected = rings.compactMap { ring -> [Point]? in
+            var points = ring.map { coordinate -> Point in
+                let latitude = min(85.05112878, max(-85.05112878, coordinate.latitude)) * .pi / 180
+                return Point(x: (coordinate.longitude + 180) / 360 * scale, y: (1 - asinh(tan(latitude)) / .pi) / 2 * scale)
+            }
+            guard let first = points.first, points.count > 1 else { return nil }
+            if points.last != first { points.append(first) }
+            return points
+        }
+        var cells = Set<Cell>()
+        // Tiles that a ring passes through, found by stepping across the grid lines along each edge.
+        for ring in projected {
+            for (start, end) in zip(ring, ring.dropFirst()) {
+                var (x, y) = (Int(start.x.rounded(.down)), Int(start.y.rounded(.down)))
+                let (endX, endY) = (Int(end.x.rounded(.down)), Int(end.y.rounded(.down)))
+                let (stepX, stepY) = (end.x > start.x ? 1 : -1, end.y > start.y ? 1 : -1)
+                let (width, height) = (abs(end.x - start.x), abs(end.y - start.y))
+                // The share of the edge travelled when it crosses the next vertical and horizontal grid line.
+                var nextX = width == 0 ? .infinity : (stepX > 0 ? Double(x + 1) - start.x : start.x - Double(x)) / width
+                var nextY = height == 0 ? .infinity : (stepY > 0 ? Double(y + 1) - start.y : start.y - Double(y)) / height
+                cells.insert(Cell(x: x, y: y))
+                for _ in 0..<(abs(endX - x) + abs(endY - y)) {
+                    if y == endY || (x != endX && nextX < nextY) {
+                        x += stepX
+                        nextX += 1 / width
+                    } else {
+                        y += stepY
+                        nextY += 1 / height
+                    }
+                    cells.insert(Cell(x: x, y: y))
+                }
+            }
+        }
+        // Tiles whose center lies inside, row by row.
+        let rows = projected.flatMap { $0.map(\.y) }
+        if let top = rows.min(), let bottom = rows.max() {
+            for row in Int(top.rounded(.down))...Int(bottom.rounded(.down)) {
+                let center = Double(row) + 0.5
+                var crossings: [Double] = []
+                for ring in projected {
+                    for (start, end) in zip(ring, ring.dropFirst()) where (start.y <= center) != (end.y <= center) {
+                        crossings.append(start.x + (center - start.y) / (end.y - start.y) * (end.x - start.x))
+                    }
+                }
+                crossings.sort()
+                for index in stride(from: 0, to: crossings.count - 1, by: 2) {
+                    let (first, last) = (Int((crossings[index] - 0.5).rounded(.up)), Int((crossings[index + 1] - 0.5).rounded(.down)))
+                    if first <= last { for column in first...last { cells.insert(Cell(x: column, y: row)) } }
+                }
+            }
+        }
+        return Set(cells.compactMap { OfflineTile(zoom: zoom, x: $0.x, y: $0.y) })
+    }
+
+    private struct Point: Equatable {
+        let x: Double
+        let y: Double
+    }
+
+    private struct Cell: Hashable {
+        let x: Int
+        let y: Int
     }
 }
