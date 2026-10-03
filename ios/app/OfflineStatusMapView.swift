@@ -3,7 +3,6 @@ import SwiftUI
 import Turf
 
 struct OfflineStatusMapView: View {
-    var obscuredBottom: CGFloat = 0
     @Environment(OfflineMaps.self) private var offline
     @State private var mapIssue: String?
 
@@ -13,7 +12,7 @@ struct OfflineStatusMapView: View {
                 ContentUnavailableView("Map unavailable", systemImage: "map", description: Text(issue))
             } else {
                 OfflineStatusMap(regions: offline.regions, downloads: offline.downloads,
-                    focusedRegion: nil, obscuredBottom: obscuredBottom, onIssue: { mapIssue = $0 })
+                    focusedRegion: nil, onIssue: { mapIssue = $0 })
             }
         }
         .alert("Map unavailable", isPresented: Binding(get: { mapIssue != nil }, set: { if !$0 { mapIssue = nil } })) {
@@ -26,7 +25,6 @@ struct OfflineStatusMap: UIViewRepresentable {
     let regions: [OfflineRegion]
     let downloads: [String: OfflineMapRecord]
     let focusedRegion: OfflineRegion?
-    var obscuredBottom: CGFloat = 0
     let onIssue: (String?) -> Void
     var isPreview = false
 
@@ -44,17 +42,15 @@ struct OfflineStatusMap: UIViewRepresentable {
         map.gestures.options.pitchEnabled = false
         map.gestures.options.rotateEnabled = false
         map.isUserInteractionEnabled = !isPreview
+        map.ornaments.options.scaleBar.visibility = .hidden
         if isPreview {
             map.ornaments.options.compass.visibility = .hidden
-            map.ornaments.options.scaleBar.visibility = .hidden
         }
         return map
     }
 
     func updateUIView(_ uiView: MapView, context: Context) {
         context.coordinator.update(regions: regions, records: downloads)
-        uiView.ornaments.options.logo.margins.y = obscuredBottom + 8
-        uiView.ornaments.options.attributionButton.margins.y = obscuredBottom + 8
         context.coordinator.render()
     }
 
@@ -66,8 +62,10 @@ struct OfflineStatusMap: UIViewRepresentable {
         private var framedSize: CGSize?
         private var records: [String: OfflineMapRecord] = [:]
         private var features = FeatureCollection(features: [])
+        private var outlines = FeatureCollection(features: [])
         private var resorts = FeatureCollection(features: [])
         private var renderedFeatures: FeatureCollection?
+        private var renderedOutlines: FeatureCollection?
         private var renderedResorts: FeatureCollection?
         let onIssue: (String?) -> Void
 
@@ -96,28 +94,46 @@ struct OfflineStatusMap: UIViewRepresentable {
             })
         }
 
+        // Areas without offline data are veiled. Downloaded areas show the map at full intensity inside an outline,
+        // and areas still downloading lose their veil as the download progresses.
         private func updateCoverage() {
             guard !isPreview else {
                 features = FeatureCollection(features: [])
+                outlines = FeatureCollection(features: [])
                 return
             }
-            let priorities = ["online": 0, "failed": 1, "queued": 2, "downloading": 2, "downloaded": 3]
-            var states: [OfflineTile: String] = [:]
+            var completion: [OfflineTile: Double] = [:]
             for record in records.values {
-                let state = record.hasSavedMap ? "downloaded" : record.phase.rawValue
-                for tile in record.region.tileCoverage[OfflineTileGrid.coverageIndexZoom] ?? [] where priorities[state, default: 0] > priorities[states[tile] ?? "online", default: 0] {
-                    states[tile] = state
+                let completed: Double
+                if record.hasSavedMap {
+                    completed = 1
+                } else if record.isPending, record.requiredResources > 0 {
+                    // Steps of 5% keep progress updates from redrawing the coverage for every resource.
+                    completed = min(1, (Double(record.completedResources) / Double(record.requiredResources) * 20).rounded(.down) / 20)
+                } else {
+                    continue
+                }
+                guard completed > 0 else { continue }
+                for pack in record.region.tileCoverage[OfflineTileGrid.coverageIndexZoom] ?? [] {
+                    completion[pack] = max(completion[pack] ?? 0, completed)
                 }
             }
-            features = FeatureCollection(features: states.keys.sorted { $0.id < $1.id }.flatMap { pack in
-                OfflineTileGrid.coverageTiles(for: pack).map { tile in
-                    var feature = Feature(geometry: tile.geometry)
-                    feature.identifier = .string(tile.id)
-                    feature.properties = ["status": .string(states[pack] ?? "online")]
-                    return feature
-                }
+            let veiled = OfflineTileGrid.complement(of: Set(completion.keys)).map { ($0, 1.0) }
+                + completion.filter { $0.value < 1 }.sorted { $0.key.id < $1.key.id }.map { ($0.key, 1 - $0.value) }
+            features = FeatureCollection(features: veiled.map { tile, veil in
+                var feature = Feature(geometry: tile.geometry)
+                feature.identifier = .string(tile.id)
+                feature.properties = ["opacity": .number(Self.veilOpacity * veil)]
+                return feature
+            })
+            // Line layers draw polygon rings as closed lines, so the corner where a ring starts gets a proper join.
+            let downloaded = Set(completion.filter { $0.value >= 1 }.keys)
+            outlines = FeatureCollection(features: OfflineTileGrid.outline(of: downloaded).map { ring in
+                Feature(geometry: .polygon(Polygon([ring.map(\.coordinate)])))
             })
         }
+
+        private static let veilOpacity = 0.8
 
         func render() {
             guard let map, map.mapboxMap.isStyleLoaded else { return }
@@ -137,17 +153,25 @@ struct OfflineStatusMap: UIViewRepresentable {
                     source.data = .featureCollection(features)
                     try map.mapboxMap.addSource(source)
                     var fill = FillLayer(id: "offline-coverage", source: source.id)
-                    fill.fillColor = .expression(Exp(.match) {
-                        Exp(.get) { "status" }
-                        "downloaded"; "#27AE60"
-                        "failed"; "#E64949"
-                        "queued"; "#F59B23"
-                        "downloading"; "#F59B23"
-                        "rgba(0,0,0,0)"
-                    })
-                    fill.fillOpacity = .constant(0.26)
+                    fill.fillColor = .constant(StyleColor(.white))
+                    fill.fillOpacity = .expression(Exp(.get) { "opacity" })
                     fill.fillAntialias = .constant(false)
                     try map.mapboxMap.addLayer(fill)
+                    var outlineSource = GeoJSONSource(id: "offline-outlines")
+                    outlineSource.data = .featureCollection(outlines)
+                    try map.mapboxMap.addSource(outlineSource)
+                    var outline = LineLayer(id: "offline-coverage-outline", source: outlineSource.id)
+                    outline.lineColor = .constant(StyleColor(UIColor(white: 0.3, alpha: 1)))
+                    outline.lineWidth = .expression(Exp(.interpolate) {
+                        Exp(.linear)
+                        Exp(.zoom)
+                        6
+                        0.75
+                        12
+                        2
+                    })
+                    outline.lineJoin = .constant(.miter)
+                    try map.mapboxMap.addLayer(outline)
                     var resortSource = GeoJSONSource(id: "offline-resorts")
                     resortSource.data = .featureCollection(resorts)
                     try map.mapboxMap.addSource(resortSource)
@@ -165,6 +189,7 @@ struct OfflineStatusMap: UIViewRepresentable {
                     names.textHaloWidth = .constant(1.5)
                     try map.mapboxMap.addLayer(names)
                     renderedFeatures = features
+                    renderedOutlines = outlines
                     renderedResorts = resorts
                 } else {
                     if renderedResorts != resorts {
@@ -174,6 +199,10 @@ struct OfflineStatusMap: UIViewRepresentable {
                     if renderedFeatures != features {
                         map.mapboxMap.updateGeoJSONSource(withId: "offline-tiles", geoJSON: .featureCollection(features))
                         renderedFeatures = features
+                    }
+                    if renderedOutlines != outlines {
+                        map.mapboxMap.updateGeoJSONSource(withId: "offline-outlines", geoJSON: .featureCollection(outlines))
+                        renderedOutlines = outlines
                     }
                 }
             } catch {

@@ -57,25 +57,108 @@ struct OfflineTileGridTests {
         #expect(parent.coordinates[1].longitude == southEast.coordinates[1].longitude)
     }
 
-    @Test func coverageSubdividesTheWholePackIntoAlignedZoomFourteenTiles() throws {
-        let pack = try #require(OfflineTile(zoom: 12, x: 2000, y: 1400))
-        let tiles = OfflineTileGrid.coverageTiles(for: pack)
-        #expect(Set(tiles).count == 16)
-        #expect(tiles.allSatisfy { $0.zoom == 14 && $0.parent(atZoom: 12) == pack })
-        let southWest = try #require(tiles.first { $0.x == 8000 && $0.y == 5603 })
-        let northEast = try #require(tiles.first { $0.x == 8003 && $0.y == 5600 })
-        #expect(southWest.coordinates[0].latitude == pack.coordinates[0].latitude)
-        #expect(southWest.coordinates[0].longitude == pack.coordinates[0].longitude)
-        #expect(northEast.coordinates[2].latitude == pack.coordinates[2].latitude)
-        #expect(northEast.coordinates[2].longitude == pack.coordinates[2].longitude)
+    @Test func complementWithoutPacksIsTheWholeWorld() throws {
+        let world = try #require(OfflineTile(zoom: 0, x: 0, y: 0))
+        #expect(OfflineTileGrid.complement(of: []) == [world])
+        #expect(OfflineTileGrid.complement(of: [try #require(OfflineTile(zoom: 11, x: 1000, y: 700))]) == [world])
     }
 
-    @Test func coverageRemainsWithinTheWorldAndRejectsOtherPackZooms() throws {
-        let edge = try #require(OfflineTile(zoom: 12, x: 4095, y: 0))
-        let tiles = OfflineTileGrid.coverageTiles(for: edge)
-        #expect(tiles.count == 16)
-        #expect(tiles.allSatisfy { (16380...16383).contains($0.x) && (0...3).contains($0.y) })
-        #expect(tiles.flatMap(\.coordinates).allSatisfy { $0.longitude <= 180 && $0.latitude <= 85.05112877981 })
-        #expect(OfflineTileGrid.coverageTiles(for: try #require(OfflineTile(zoom: 11, x: 2000, y: 1400))).isEmpty)
+    @Test func complementSurroundsOnePackWithThreeTilesAtEveryZoom() throws {
+        let pack = try #require(OfflineTile(zoom: 12, x: 2000, y: 1400))
+        let tiles = OfflineTileGrid.complement(of: [pack])
+        #expect(tiles.count == 36)
+        #expect(Set(tiles.map(\.zoom)) == Set(1...12))
+        #expect(tiles.allSatisfy { pack.parent(atZoom: $0.zoom) != $0 })
+    }
+
+    @Test func complementAndPacksPartitionTheWorld() {
+        let packs = Set([(2000, 1400), (2001, 1400), (2000, 1401), (2100, 1450), (0, 0), (4095, 4095)]
+            .compactMap { OfflineTile(zoom: 12, x: $0.0, y: $0.1) })
+        #expect(packs.count == 6)
+        let tiles = OfflineTileGrid.complement(of: packs)
+        #expect(Set(tiles).count == tiles.count)
+        #expect(tiles.allSatisfy { tile in packs.allSatisfy { $0.parent(atZoom: tile.zoom) != tile } })
+        #expect(tiles.allSatisfy { tile in
+            tiles.allSatisfy { other in other.zoom <= tile.zoom || other.parent(atZoom: tile.zoom) != tile }
+        })
+        let packUnits = tiles.reduce(packs.count) { $0 + (1 << (2 * (12 - $1.zoom))) }
+        #expect(packUnits == 1 << 24)
+    }
+
+    @Test func outlineOfOnePackFollowsItsFourCorners() throws {
+        let pack = try #require(OfflineTile(zoom: 12, x: 2000, y: 1400))
+        let rings = OfflineTileGrid.outline(of: [pack])
+        #expect(rings.count == 1)
+        let ring = try #require(rings.first)
+        #expect(ring.count == 5 && ring.first == ring.last)
+        #expect(Set(ring) == corners([(2000, 1400), (2001, 1400), (2001, 1401), (2000, 1401)]))
+        #expect(ring[0].coordinate.latitude == pack.coordinates[3].latitude)
+        #expect(ring[0].coordinate.longitude == pack.coordinates[3].longitude)
+        #expect(OfflineTileGrid.outline(of: []).isEmpty)
+        #expect(OfflineTileGrid.outline(of: [try #require(OfflineTile(zoom: 11, x: 1000, y: 700))]).isEmpty)
+    }
+
+    @Test func outlineMergesStraightRunsAroundJoinedPacks() {
+        let pair = OfflineTileGrid.outline(of: packs([(2000, 1400), (2001, 1400)]))
+        #expect(pair.count == 1 && pair.first?.count == 5)
+        #expect(Set(pair.first ?? []) == corners([(2000, 1400), (2002, 1400), (2002, 1401), (2000, 1401)]))
+        let bend = OfflineTileGrid.outline(of: packs([(2166, 1448), (2167, 1448), (2167, 1449)]))
+        #expect(bend.count == 1 && bend.first?.count == 7)
+        #expect(Set(bend.first ?? []) == corners([(2166, 1448), (2168, 1448), (2168, 1450), (2167, 1450), (2167, 1449), (2166, 1449)]))
+    }
+
+    @Test func outlineSeparatesHolesAndPacksThatTouchOnlyAtACorner() {
+        var block: [(Int, Int)] = []
+        for y in 0..<3 {
+            for x in 0..<3 where !(x == 1 && y == 1) { block.append((2000 + x, 1400 + y)) }
+        }
+        let rings = OfflineTileGrid.outline(of: packs(block))
+        #expect(rings.count == 2 && rings.allSatisfy { $0.count == 5 })
+        #expect(Set(rings.map { Set($0) }) == [
+            corners([(2000, 1400), (2003, 1400), (2003, 1403), (2000, 1403)]),
+            corners([(2001, 1401), (2002, 1401), (2002, 1402), (2001, 1402)]),
+        ])
+        let diagonal = OfflineTileGrid.outline(of: packs([(2000, 1400), (2001, 1401)]))
+        #expect(diagonal.count == 2 && diagonal.allSatisfy { $0.count == 5 })
+        #expect(Set(diagonal.map { Set($0) }) == [
+            corners([(2000, 1400), (2001, 1400), (2001, 1401), (2000, 1401)]),
+            corners([(2001, 1401), (2002, 1401), (2002, 1402), (2001, 1402)]),
+        ])
+    }
+
+    @Test func outlineTracesEveryUncoveredSideExactlyOnce() {
+        // A diagonal pattern where many packs touch only at their corners.
+        var cells: [(Int, Int)] = []
+        for y in 0..<8 {
+            for x in 0..<8 where (2 * x + 3 * y) % 5 < 2 { cells.append((2000 + x, 1400 + y)) }
+        }
+        let covered = packs(cells)
+        let rings = OfflineTileGrid.outline(of: covered)
+        var length = 0
+        var axisAligned = true
+        for ring in rings {
+            for (from, to) in zip(ring, ring.dropFirst()) {
+                length += abs(to.x - from.x) + abs(to.y - from.y)
+                axisAligned = axisAligned && (from.x == to.x || from.y == to.y)
+            }
+        }
+        let offsets: [(Int, Int)] = [(0, -1), (1, 0), (0, 1), (-1, 0)]
+        var sides = 0
+        for pack in covered {
+            for (dx, dy) in offsets {
+                if let neighbor = OfflineTile(zoom: 12, x: pack.x + dx, y: pack.y + dy), covered.contains(neighbor) { continue }
+                sides += 1
+            }
+        }
+        #expect(sides > 0 && length == sides && axisAligned)
+        #expect(rings.allSatisfy { $0.count >= 5 && $0.first == $0.last })
+    }
+
+    private func packs(_ cells: [(Int, Int)]) -> Set<OfflineTile> {
+        Set(cells.compactMap { OfflineTile(zoom: 12, x: $0.0, y: $0.1) })
+    }
+
+    private func corners(_ points: [(Int, Int)]) -> Set<OfflineTileGrid.Corner> {
+        Set(points.map { OfflineTileGrid.Corner(x: $0.0, y: $0.1) })
     }
 }

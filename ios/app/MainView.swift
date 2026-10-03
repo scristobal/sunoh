@@ -86,7 +86,7 @@ struct MainView: View {
 
             Tab("Profile", systemImage: "person.crop.circle", value: .profile) {
                 NavigationStack {
-                    ProfileView(library: library)
+                    ProfileView(library: library, tracker: tracker)
                         .navigationTitle("Profile")
                         .navigationBarTitleDisplayMode(.inline)
                 }

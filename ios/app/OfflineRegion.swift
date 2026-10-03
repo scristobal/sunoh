@@ -24,6 +24,19 @@ struct OfflineRegion: Identifiable, Codable, Sendable {
         }
     }
 
+    static func nearestFirst(_ regions: [OfflineRegion], from origin: Coordinate) -> [OfflineRegion] {
+        let distances: [(region: OfflineRegion, meters: Double)] = regions.map { region in
+            let center = try? Coordinate(latitude: region.centerLatitude, longitude: region.centerLongitude)
+            return (region, center.map { Geo.distanceMeters(from: origin, to: $0) } ?? .infinity)
+        }
+        return distances.sorted { first, second in
+            guard first.meters != second.meters else {
+                return first.region.name.localizedStandardCompare(second.region.name) == .orderedAscending
+            }
+            return first.meters < second.meters
+        }.map(\.region)
+    }
+
     static func loadCatalog() throws -> [OfflineRegion] {
         guard let url = Bundle.main.url(forResource: "offline-regions", withExtension: "geojson", subdirectory: "SkiData") else {
             throw CatalogError.missing

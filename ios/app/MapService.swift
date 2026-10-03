@@ -5,6 +5,7 @@ import MapboxMaps
     static let offlineStorageURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("OfflineMaps", isDirectory: true)
     static let tileStorageURL = offlineStorageURL.appendingPathComponent("Tiles", isDirectory: true)
+    static var diskCacheURL: URL { MapboxMapsOptions.dataPath.appendingPathComponent("map_data.db") }
     private static var storageIssue: String?
     private static var configured = false
     static let defaultStyleURI = StyleURI(rawValue: "mapbox://styles/el-tobal/cmuixgnck000h01s979mi0gyt")!

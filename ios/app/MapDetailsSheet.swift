@@ -84,7 +84,8 @@ struct MapSheetCloseButton: View {
 
     var body: some View {
         Button(role: .close, action: action)
-            .buttonStyle(.bordered)
+            .labelStyle(.iconOnly)
+            .buttonStyle(.glass)
             .buttonBorderShape(.circle)
             .controlSize(.large)
             .accessibilityLabel(label)

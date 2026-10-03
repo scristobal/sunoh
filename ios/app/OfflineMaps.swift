@@ -11,10 +11,12 @@ final class OfflineMaps {
     private(set) var downloads: [String: OfflineMapRecord] = [:]
     private(set) var allowsMobileData = false
     private(set) var storageBytes: Int64 = 0
+    private(set) var cacheBytes: Int64 = 0
     private(set) var isReady = false
     private(set) var catalogError: String?
     private(set) var issue: String?
     private(set) var removing = Set<String>()
+    private(set) var isClearingCache = false
     private(set) var connection: Connection = .checking
 
     enum Connection { case checking, offline, wifiRequired, ready }
@@ -33,6 +35,8 @@ final class OfflineMaps {
     @ObservationIgnored private var networkCellular = false
     @ObservationIgnored private var active: Active?
     @ObservationIgnored private var operation: (any Cancelable)?
+    @ObservationIgnored private var styleRefresh: (any Cancelable)?
+    @ObservationIgnored private var styleRefreshDue = true
     @ObservationIgnored private var retryTask: Task<Void, Never>?
     @ObservationIgnored private var storageTask: Task<Void, Never>?
     @ObservationIgnored private var foreground = true
@@ -56,7 +60,9 @@ final class OfflineMaps {
     }
 
     var storageText: String { Self.formatBytes(storageBytes) }
+    var cacheText: String { Self.formatBytes(cacheBytes) }
     var canRequest: Bool { isReady && MapService.configurationIssue == nil && issue == nil && removing.isEmpty }
+    var canClearCache: Bool { isReady && !isClearingCache && removing.isEmpty }
 
     func start() async {
         guard !started else { return }
@@ -117,6 +123,7 @@ final class OfflineMaps {
     func setForeground(_ value: Bool) {
         foreground = value
         if value {
+            styleRefreshDue = true
             endBackgroundTask()
             refreshStorage()
             Task { [weak self] in
@@ -161,6 +168,7 @@ final class OfflineMaps {
             downloads.removeValue(forKey: region.id)
             guard persist() else { downloads[region.id] = record; return }
             if downloads.isEmpty, let manager, let uri = StyleURI(rawValue: record.styleURI) {
+                styleRefresh?.cancel()
                 let packs = try await allStylePacks()
                 if packs.contains(where: { $0.styleURI == record.styleURI }) {
                     let _: StylePack = try await withCheckedThrowingContinuation { continuation in
@@ -179,19 +187,37 @@ final class OfflineMaps {
         }
     }
 
+    func clearCache() async throws {
+        guard let tileStore, canClearCache else { return }
+        isClearingCache = true
+        defer { isClearingCache = false; refreshStorage() }
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+            MapboxMap.clearData { error in
+                if let error { continuation.resume(throwing: error) } else { continuation.resume() }
+            }
+        }
+        let _: UInt32 = try await withCheckedThrowingContinuation { continuation in
+            tileStore.clearAmbientCache { continuation.resume(with: $0) }
+        }
+    }
+
     func refreshStorage() {
         guard storageTask == nil else { return }
         let directory = MapService.offlineStorageURL
+        let cache = MapService.diskCacheURL
         storageTask = Task { [weak self] in
-            let bytes = await Task.detached(priority: .utility) {
+            let (bytes, cacheBytes) = await Task.detached(priority: .utility) {
                 let keys: Set<URLResourceKey> = [.isRegularFileKey, .totalFileAllocatedSizeKey, .fileAllocatedSizeKey]
-                guard let files = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: Array(keys)) else { return Int64(0) }
-                return files.compactMap { $0 as? URL }.reduce(Int64(0)) { total, url in
-                    guard let values = try? url.resourceValues(forKeys: keys), values.isRegularFile == true else { return total }
-                    return total + Int64(values.totalFileAllocatedSize ?? values.fileAllocatedSize ?? 0)
+                func allocated(_ url: URL) -> Int64 {
+                    guard let values = try? url.resourceValues(forKeys: keys), values.isRegularFile == true else { return 0 }
+                    return Int64(values.totalFileAllocatedSize ?? values.fileAllocatedSize ?? 0)
                 }
+                let files = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: Array(keys))
+                let bytes = files?.compactMap { $0 as? URL }.reduce(Int64(0)) { $0 + allocated($1) } ?? 0
+                return (bytes, allocated(cache))
             }.value
             self?.storageBytes = bytes
+            self?.cacheBytes = cacheBytes
             self?.storageTask = nil
         }
     }
@@ -208,7 +234,8 @@ final class OfflineMaps {
     }
 
     private func pump() {
-        guard foreground, isReady, issue == nil, connection == .ready, active == nil, removing.isEmpty else { return }
+        guard foreground, isReady, issue == nil, connection == .ready, active == nil, styleRefresh == nil, removing.isEmpty else { return }
+        if styleRefreshDue, refreshStyle() { return }
         let pending = downloads.values.filter(\.isPending).sorted { $0.requestedAt < $1.requestedAt }
         guard !pending.isEmpty else { return }
         guard let record = pending.first(where: { ($0.retryAfter ?? .distantPast) <= Date() }) else {
@@ -245,6 +272,21 @@ final class OfflineMaps {
                 }
             }
         }
+    }
+
+    private func refreshStyle() -> Bool {
+        styleRefreshDue = false
+        let uri = MapService.styleURI
+        guard let manager, downloads.values.contains(where: { $0.styleURI == uri.rawValue }),
+              let options = StylePackLoadOptions(glyphsRasterizationMode: .ideographsRasterizedLocally,
+                  acceptExpired: false, extraOptions: ["network-restriction-disallow-expensive": !allowsMobileData]) else { return false }
+        styleRefresh = manager.loadStylePack(for: uri, loadOptions: options) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.styleRefresh = nil
+                self?.pump()
+            }
+        }
+        return true
     }
 
     private func loadTiles(_ work: Active) {
