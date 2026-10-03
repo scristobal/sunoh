@@ -171,6 +171,7 @@ struct StaticMapViewRepresentable: UIViewRepresentable {
         }
 
         func styleDidLoad(in mapView: ActivityMapView) {
+            MapService.applyAtmosphere(to: mapView.mapboxMap)
             map.updateSessionTrack(geometry, passages: passages)
             hasLoadedStyle = true
             // Style loading can finish before SwiftUI gives the map a frame.
@@ -277,10 +278,16 @@ struct MapViewRepresentable: UIViewRepresentable {
         }
 
         func observeStyle(in mapView: ActivityMapView) {
-            styleObservation = mapView.mapboxMap.onStyleLoaded.observe { [weak self] _ in
-                self?.map.renderTrack()
+            styleObservation = mapView.mapboxMap.onStyleLoaded.observe { [weak self, weak mapView] _ in
+                guard let mapView else { return }
+                self?.styleDidLoad(in: mapView)
             }
-            if mapView.mapboxMap.isStyleLoaded { map.renderTrack() }
+            if mapView.mapboxMap.isStyleLoaded { styleDidLoad(in: mapView) }
+        }
+
+        private func styleDidLoad(in mapView: ActivityMapView) {
+            MapService.applyAtmosphere(to: mapView.mapboxMap)
+            map.renderTrack()
         }
     }
 }

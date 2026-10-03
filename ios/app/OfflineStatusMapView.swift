@@ -37,7 +37,10 @@ struct OfflineStatusMap: UIViewRepresentable {
         let map = CoverageMapView(frame: .zero, mapInitOptions: options)
         context.coordinator.map = map
         context.coordinator.update(regions: regions, records: downloads)
-        context.coordinator.observation = map.mapboxMap.onStyleLoaded.observe { [weak coordinator = context.coordinator] _ in coordinator?.render() }
+        context.coordinator.observation = map.mapboxMap.onStyleLoaded.observe { [weak coordinator = context.coordinator, weak map] _ in
+            if let map { MapService.applyAtmosphere(to: map.mapboxMap) }
+            coordinator?.render()
+        }
         map.onLayout = { [weak coordinator = context.coordinator] in coordinator?.render() }
         map.gestures.options.pitchEnabled = false
         map.gestures.options.rotateEnabled = false

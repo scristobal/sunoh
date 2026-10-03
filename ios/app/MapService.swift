@@ -1,5 +1,6 @@
 import Foundation
 import MapboxMaps
+import OSLog
 
 @MainActor enum MapService {
     static let offlineStorageURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -42,6 +43,39 @@ import MapboxMaps
         MapboxMapsOptions.tileStoreUsageMode = .readOnly
         configured = true
         return true
+    }
+
+    /// Replaces the style's fog with a blue haze that thickens with distance, so farther ridges
+    /// separate from nearer ones on a tilted map. The range starts at the map center and scales
+    /// with zoom and map size. Mapbox fades fog in between 45° and 65° of pitch, so flat maps
+    /// are unchanged.
+    static func applyAtmosphere(to mapboxMap: MapboxMap) {
+        var atmosphere = Atmosphere()
+        atmosphere.range = .constant([0, 6])
+        atmosphere.color = .constant(StyleColor(rawValue: "rgb(196, 216, 238)"))
+        atmosphere.highColor = .constant(StyleColor(rawValue: "rgb(98, 176, 240)"))
+        atmosphere.horizonBlend = .constant(0.08)
+        do {
+            try mapboxMap.setAtmosphere(atmosphere)
+            try hideLabelsInHaze(in: mapboxMap)
+        } catch {
+            Logger(subsystem: "com.samuel.sunoh", category: "map").error("Unable to set the map atmosphere.")
+        }
+    }
+
+    /// Drops the style's labels where the haze already hides much of the terrain, so names don't
+    /// float over ridges the map no longer shows. distance-from-center measures map heights beyond
+    /// the center and works only in symbol filters. A flat map stays well below the cutoff; only a
+    /// steeply tilted one reaches it.
+    private static func hideLabelsInHaze(in mapboxMap: MapboxMap) throws {
+        let cutoff: [Any] = ["<", ["distance-from-center"], 1.5]
+        for layer in mapboxMap.allLayerIdentifiers where layer.type == .symbol {
+            let filter = mapboxMap.layerProperty(for: layer.id, property: "filter")
+            // The live map view is reused, so the same style can come through here twice.
+            guard !"\(filter.value)".contains("distance-from-center") else { continue }
+            let combined: [Any] = filter.kind == .undefined ? cutoff : ["all", cutoff, filter.value]
+            try mapboxMap.setLayerProperty(for: layer.id, property: "filter", value: combined)
+        }
     }
 
     static func publicAccessToken(_ value: String?) -> String? {
