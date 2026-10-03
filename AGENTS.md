@@ -1,68 +1,16 @@
-# Scope and discovery
+# Sunō
 
-- These instructions apply throughout the repository. Before working in a subfolder, look for and read every AGENTS.md along the path from the repository root to the files you will touch. Repeat this check when working in deeper folders. More-specific instructions take precedence within their subtree.
-- Keep shared instructions in this file and project-specific instructions in nested AGENTS.md files. Do not duplicate inherited rules.
-- Keep Codex configuration at the repository root, not in per-project folders.
+Sunō is a ski and snowboard tracking app for iPhone, written in Swift, with a Live Activity. Use Sunō in the interface and prose, and Sunoh where ASCII is required.
 
-# Maintaining these instructions
+The app is a prototype. Existing code and earlier decisions show what was tried, not what must stay. Try alternatives, replace code and change the interface when that serves the request.
 
-- Keep AGENTS.md files as the only non-code files written for agents. Documentation and READMEs are the only exceptions. Do not create separate files that narrate the code.
-- Record lasting decisions, ownership, tradeoffs and deferred commitments. Add a rule only when user direction or an accepted decision establishes its lasting scope, it guides a future choice, and it remains useful across implementations that preserve the same intent.
-- State durable decisions precisely, including chosen platforms or tools when the choice matters. Keep command examples, source inventories, paths, configuration values and implementation descriptions with the code that defines them.
-- Code and tests establish current behavior. A requested behavior change alone does not establish permanent policy. Before finishing an edit, check every changed rule against the inclusion criteria above and remove implementation descriptions or unsupported constraints. Resolve uncertain intent before creating a requirement.
-- Record lasting user conventions in the same change. Preserve their scope and strength, distinguish requirements from preferences, and keep exceptions beside their rules. Do not generalize temporary corrections or silently change policy.
-- Before retiring guidance, preserve still-relevant decisions in the applicable AGENTS.md and keep operational knowledge discoverable through code and tool help. Keep task updates and incident histories in the conversation.
-- Give each rule one purpose. Revise existing rules instead of appending duplicates. Merge overlaps, remove obsolete guidance and explain reasons where they help future decisions.
-- Treat sunoh-docs as a closed, read-only archive. Do not consult or maintain it, restore its contents as active guidance, or make active workflows depend on it.
-- Do not retrieve other conversations or saved memories, or use them as context. Saving and inspecting the current conversation are allowed.
-
-# Writing
-
-- When editing text, check it against the rules below, revise it while preserving meaning and intended tone, and reread for clarity. Keep requirements direct without weakening them or adding implementation detail.
-- Keep each paragraph and list item on one source line. Do not add manual line wraps or unnecessary blank lines.
-- Remove superficial clauses such as "highlighting", "ensuring" or "reflecting" when they add no information. If the claim matters, state it concretely and support it with a source.
-- Name the source of an attributed claim. Remove vague appeals to experts, reports or critics when no source is available.
-- Prefer plain words over inflated vocabulary such as "additionally", "crucial", "delve", "enduring", "enhance", "fostering", "garner", "interplay", "intricate", "pivotal", "showcase", "testament", "underscore" and "vibrant", or abstract uses of "landscape" and "tapestry". Use "use" instead of "utilize" or "leverage", "help" instead of "facilitate", "many" instead of "numerous", and "if" instead of "in the event that".
-- Use "is" or "has" when phrases such as "serves as", "stands as", "boasts" or "features" add no meaning.
-- State the point directly instead of framing it as "not just X, but Y".
-- Let the content determine how many items a list needs. Do not force ideas into groups of three.
-- Use one consistent term for each concept. Do not cycle through synonyms for variety.
-- Use "from X to Y" only when the endpoints belong to a meaningful scale. Otherwise, name the topics directly.
-- Separate thoughts with periods or commas. Do not use em dashes, en dashes, parentheses or hyphens as substitute separators.
-- Use colons before lists or examples, not to connect clauses in the middle of a sentence. Rewrite the sentence so the point stands on its own.
-- Use bold sparingly. Do not emphasize every proper noun or acronym.
-- Replace list items whose bold label and colon merely repeat the following text with prose. A bold lead-in that ends with a period is acceptable when it names the item and the following sentence adds new information.
-- Use sentence case for headings.
-- Remove decorative emojis from headings and list items.
-- Use straight quotation marks instead of curly quotation marks.
-- Remove stock chatbot openings, offers and sign-offs. Respond directly without flattery or exaggerated agreement.
-- Cut filler and repetition. Replace "in order to" with "to" and "due to the fact that" with "because". Delete empty announcements such as "it is important to note that".
-- Remove stacked hedges while preserving uncertainty that affects the claim. A single "may" is enough when that is the intended meaning.
-- End with specific facts or plans when a conclusion is needed. Omit generic optimism and empty closing statements.
-- Replace abstract jargon and metaphor with concrete terms. Check words such as "substrate", "wedge", "vector", "locus", "vantage", "nexus", "primitive", "harness", "surface", "bedrock", "scaffolding", "modality", "paradigm", "gold-plating", "ratchet", "evacuate", "endgame", "north star" and "flywheel" when used figuratively. Name the actual mechanism or action, such as "base", "add", "method", "move out" or "a limit that only tightens".
-- Explain what something does with concrete instructions, facts, mechanisms or measurements. Replace impressions and slogans with information the reader can act on. Remove generic project descriptions that could appear unchanged in another project's documentation.
-- Shorten or split sentences that require rereading. Keep one idea per sentence.
-- Prefer active voice and name the actor. Use passive voice only when the actor is unknown or does not matter.
-- Cut unnecessary adverbs. Use a stronger verb or a measured result instead of a vague claim about speed or improvement.
-- Replace aphorisms, rhetorical fragments, personified code, figurative verbs and stock framing with literal statements. Say what the action or condition means.
-- Write complete sentences with articles and verbs. Avoid compressed fragments, arrows and abbreviations that make readers decode the meaning.
-
-# Project direction
-
-Sunō is a ski and snowboard tracking app that encourages exploration and personal progress. Use Sunō in the interface, documentation and prose. Use Sunoh only when ASCII characters are required.
-
-## Ownership and scope
-
-- Keep map generation, delivery and app integration independent. Consume published interfaces without depending on another project's internal code, configuration or build tools.
-- Make only requested changes. Explain additional concerns and the options, including leaving them unchanged, and wait for a decision before implementing a remedy.
-- Honor explicit deferrals and retain the outstanding requirement.
-
-## Tests
-
-- During the fast iteration phase, persist tests only for geomatching and pure computations over tracks and geometries. Do not persist UI or UX tests while those behaviors are changing and regressions are expected.
-- Use temporary tests during development when they help verify correctness or debug an issue. Run them and remove them before finishing unless they belong to the retained computation coverage.
-
-## Version control
-
-- Always use SSH for Git remotes.
-- Commit or push only when explicitly requested.
+- Do not edit this file or add other instruction files unless asked. Decisions live in the code and in commit messages.
+- Do not break recording. It must continue in the background and must not depend on views, maps or analysis. Derived work never rewrites recorded observations.
+- Installations can be wiped and reseeded. Keep one storage schema and reset stores instead of writing migrations. Tests must not touch the app's real store.
+- Development commands are `just` recipes in `ios`. After changing behavior, run the app with `just run` and check the change on the simulator. In the Claude desktop app, view and drive the app in the integrated simulator, not Device Hub. Use `just gps` to replay a route when a check needs a live track.
+- Seed simulators and devices only from the original Slopes exports, with the `just` seed recipes. Never substitute another dataset.
+- Keep tests only for pure track and geometry computations. Remove temporary tests before finishing. Do not write UI tests.
+- Do not run accessibility audits unless asked.
+- Do not read sunoh-docs, other conversations or saved memories.
+- Commit or push only when asked. Document the session in the commit message, especially the approaches that were tried and discarded and the reason each was dropped.
+- Use SSH remotes. Keep credentials, private recordings and large map data out of Git.

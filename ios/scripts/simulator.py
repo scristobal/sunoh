@@ -1,10 +1,15 @@
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
 
 
 def open_viewer():
+    # Claude desktop shows the simulator in its own panel, so a second viewer window is unwanted there.
+    if os.environ.get("CLAUDE_CODE_ENTRYPOINT") == "claude-desktop":
+        print("Skipping the device viewer. Use the integrated simulator in Claude desktop.")
+        return
     simctl = Path(subprocess.check_output(["xcrun", "--find", "simctl"], text=True).strip())
     developer = simctl.parents[2]
     viewers = [
