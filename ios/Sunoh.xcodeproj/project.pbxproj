@@ -319,16 +319,17 @@
 			);
 			inputPaths = (
 				"$(SRCROOT)/scripts/bundle_ski_data.sh",
+				"$(SUNOH_SKI_DATA_DIRECTORY)",
 				"$(SUNOH_SKI_DATA_DIRECTORY)/lifts.gpkg",
 				"$(SUNOH_SKI_DATA_DIRECTORY)/ski_areas.gpkg",
-				"$(SUNOH_SKI_DATA_DIRECTORY)/spots.gpkg",
+				"$(SUNOH_SKI_DATA_DIRECTORY)/offline-regions.geojson",
 			);
 			name = "Bundle Ski Data";
 			outputPaths = (
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/SkiData",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/SkiData/lifts.gpkg",
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/SkiData/ski_areas.gpkg",
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/SkiData/spots.gpkg",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/SkiData/offline-regions.geojson",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;

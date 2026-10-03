@@ -2,6 +2,11 @@ import Foundation
 import MapboxMaps
 
 @MainActor enum MapService {
+    static let offlineStorageURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("OfflineMaps", isDirectory: true)
+    static let tileStorageURL = offlineStorageURL.appendingPathComponent("Tiles", isDirectory: true)
+    private static var storageIssue: String?
+    private static var configured = false
     static let defaultStyleURI = StyleURI(rawValue: "mapbox://styles/el-tobal/cmuixgnck000h01s979mi0gyt")!
 
     static let styleURI = resolvedStyleURI(
@@ -13,12 +18,28 @@ import MapboxMaps
     )
 
     static var configurationIssue: String? {
-        accessToken == nil ? "Map access is not configured." : nil
+        accessToken == nil ? "Map access is not configured." : storageIssue
     }
 
     @discardableResult static func configure() -> Bool {
         guard let accessToken else { return false }
+        guard !configured else { return true }
+        do {
+            try FileManager.default.createDirectory(at: tileStorageURL, withIntermediateDirectories: true)
+            var directory = offlineStorageURL
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            try directory.setResourceValues(values)
+        } catch {
+            storageIssue = "Map storage could not be opened. Free some space and reopen Sunō."
+            return false
+        }
+        storageIssue = nil
         MapboxOptions.accessToken = accessToken
+        TileStore.setRootPath(tileStorageURL)
+        MapboxMapsOptions.tileStore = .default
+        MapboxMapsOptions.tileStoreUsageMode = .readOnly
+        configured = true
         return true
     }
 

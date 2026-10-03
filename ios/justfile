@@ -45,6 +45,14 @@ gps: phone
 ski-data source output:
     python3 scripts/ski_data.py "$1" "$2" --zip
 
+# Prepare Alpine coverage metadata from published OpenSkiData. Requires Shapely 2.
+offline-catalog source output:
+    python3 scripts/offline_catalog.py "$1" "$2"
+
+# Verify resort padding, geographic projection and grid intersections. Requires Shapely 2.
+test-offline-geometry:
+    python3 scripts/test_offline_geometry.py
+
 # Prompt for a public Mapbox token and save the ignored app build configuration.
 token:
     @python3 scripts/credentials.py

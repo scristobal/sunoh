@@ -7,12 +7,16 @@ import UIKit
     @Environment(\.scenePhase) private var scenePhase
     @State private var startup: Startup = .idle
     @State private var liveActivity = RecordingActivityController()
+    @State private var offline = OfflineMaps()
 
     var body: some Scene {
         WindowGroup {
             appContent
+                .environment(offline)
+                .task { await offline.start() }
                 .task { await openDatabase() }
                 .onChange(of: scenePhase) {
+                    offline.setForeground(scenePhase == .active)
                     guard scenePhase == .active, case .ready(let ready) = startup else { return }
                     ready.location.activate()
                     Task { await ready.recorder.refresh(); await ready.library.reloadHistory() }

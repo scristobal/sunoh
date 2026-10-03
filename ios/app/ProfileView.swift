@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ProfileView: View {
     let library: ActivityLibrary
+    @Environment(OfflineMaps.self) private var offline
 
     var body: some View {
         Form {
@@ -19,6 +20,15 @@ struct ProfileView: View {
 
             Section("Map") {
                 LabeledContent("Style", value: "Blue Snow 3D")
+                NavigationLink {
+                    OfflineMapsView()
+                } label: {
+                    LabeledContent {
+                        Text(offline.storageText).foregroundStyle(.secondary)
+                    } label: {
+                        Label("Offline maps", systemImage: "arrow.down.circle")
+                    }
+                }
             }
 
             if case .failed(let loadError) = library.history {
